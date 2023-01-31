@@ -208,6 +208,12 @@ libs$(DELIM)libdsp$(DELIM)libdsp$(LIBEXT): pass2dep
 staging$(DELIM)libdsp$(LIBEXT): libs$(DELIM)libdsp$(DELIM)libdsp$(LIBEXT)
 	$(Q) $(call INSTALL_LIB,$<,$@)
 
+libs$(DELIM)libzmq$(DELIM)libzmq$(LIBEXT): pass2dep
+	$(Q) $(MAKE) -C libs$(DELIM)libzmq libzmq$(LIBEXT) EXTRAFLAGS="$(EXTRAFLAGS)"
+
+staging$(DELIM)libzmq$(LIBEXT): libs$(DELIM)libzmq$(DELIM)libzmq$(LIBEXT)
+	$(Q) $(call INSTALL_LIB,$<,$@)
+
 ifeq ($(CONFIG_BUILD_FLAT),y)
 $(APPDIR)$(DELIM)libapps$(LIBEXT): pass2dep
 else

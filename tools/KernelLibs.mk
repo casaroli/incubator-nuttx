@@ -118,6 +118,12 @@ ifeq ($(CONFIG_OPENAMP),y)
 NUTTXLIBS += staging$(DELIM)libopenamp$(LIBEXT)
 endif
 
+# Add ZeroMQ
+
+ifeq ($(CONFIG_ZEROMQ),y)
+NUTTXLIBS += staging$(DELIM)libzmq$(LIBEXT)
+endif
+
 # Add libraries for board common support
 
 ifeq ($(CONFIG_ARCH_BOARD_COMMON),y)

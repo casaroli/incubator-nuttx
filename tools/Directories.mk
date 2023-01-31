@@ -143,6 +143,12 @@ else
 CLEANDIRS += libs$(DELIM)libdsp
 endif
 
+ifeq ($(CONFIG_ZEROMQ),y)
+KERNDEPDIRS += libs$(DELIM)libzmq
+else
+CLEANDIRS += libs$(DELIM)libzmq
+endif
+
 # Add networking directories to KERNDEPDIRS and CLEANDIRS
 
 ifeq ($(CONFIG_NET),y)

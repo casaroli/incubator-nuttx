@@ -6,6 +6,7 @@
 /features.h
 /uClibc++
 /libcxx
+/libzmq
 /machine
 /openamp
 /metal

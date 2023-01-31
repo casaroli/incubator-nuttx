@@ -1,0 +1,128 @@
+#
+# For a description of the syntax of this configuration file,
+# see the file kconfig-language.txt in the NuttX tools repository.
+#
+
+menuconfig ZEROMQ
+	bool "ZeroMQ"
+	depends on HAVE_CXX 
+	select LIBC_NETDB
+	select CXX_EXCEPTION
+	select NETDB_DNSCLIENT
+	select NETDEV_IFINDEX
+	select PTHREAD_MUTEX_TYPES
+	select EVENT_FD
+#	select CONFIG_LIBCXX
+#	select LIBCXXABI
+	default n
+	---help---
+		Enable build for ZeroMQ library.
+
+if ZEROMQ
+
+choice
+	prompt "I/O thread polling system"
+	default ZEROMQ_IO_EPOLL
+
+config ZEROMQ_IO_DEVPOLL
+	bool "devpoll"
+	---help---
+		Use 'devpoll' I/O thread polling system.
+		
+config ZEROMQ_IO_EPOLL
+	bool "epoll"
+	---help---
+		Use 'epoll' I/O thread polling system.
+
+config ZEROMQ_IO_EPOLL_CLOEXEC
+	bool "epoll with CLOEXEC"
+	---help---
+		Use 'epoll' I/O thread polling system with CLOEXEC.
+
+config ZEROMQ_IO_POLL
+	bool "poll"
+	---help---
+		Use 'poll' I/O thread polling system.
+
+config ZEROMQ_IO_POLLSET
+	bool "pollset"
+	---help---
+		Use 'pollset' I/O thread polling system.
+
+config ZEROMQ_IO_SELECT
+	bool "select"
+	---help---
+		Use 'select' I/O thread polling system.
+
+endchoice
+
+choice
+	prompt "zmq_poll(er)_* API polling system"
+	default ZEROMQ_POLL_POLL
+
+config ZEROMQ_POLL_POLL
+	bool "poll"
+	---help---
+		Use 'poll' zmq_poll(er)_* API polling system.
+
+config ZEROMQ_POLL_SELECT
+	bool "select"
+	---help---
+		Use 'select' zmq_poll(er)_* API polling system.
+
+endchoice
+
+choice
+	prompt "condition variable implementation"
+	default ZEROMQ_COND_STL11
+
+config ZEROMQ_COND_NONE
+	bool "none"
+	---help---
+		Use no condition variable implementation.
+
+config ZEROMQ_COND_PTHREAD
+	bool "pthread"
+	---help---
+		Use pthread condition variable implementation
+
+config ZEROMQ_COND_STL11
+	bool "stl11"
+	---help---
+		Use stl11 condition variable implementation.
+
+endchoice
+config ZEROMQ_BUILTIN_SHA1
+	bool "Use built-in SHA-1"
+	default n
+	---help---
+		Use built-in sha1 implementation.
+
+comment "Transport mechanisms"
+
+config ZEROMQ_IPC
+	bool "IPC (Unix Domain Sockets) support"
+	select NET_LOCAL
+	default n
+	---help---
+		Suport ipc transport through Unix Domain Sockets.
+
+config ZEROMQ_TCP
+	bool "TCP support"
+	select NET_TCP
+	select NET_TCPBACKLOG
+	select NET_TCP_KEEPALIVE
+	default n
+	---help---
+		Suport TCP transport through Sockets.
+
+config ZEROMQ_UDP
+	bool "UDP support"
+	select NET_UDP
+	default n
+	---help---
+		Suport UDP transport through Sockets.
+
+comment "Library options"
+
+endif # ZEROMQ
