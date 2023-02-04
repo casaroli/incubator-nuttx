@@ -6,14 +6,13 @@
 menuconfig ZEROMQ
 	bool "ZeroMQ"
 	depends on HAVE_CXX 
+	depends on LIBCXX
 	select LIBC_NETDB
 	select CXX_EXCEPTION
 	select NETDB_DNSCLIENT
 	select NETDEV_IFINDEX
 	select PTHREAD_MUTEX_TYPES
 	select EVENT_FD
-#	select CONFIG_LIBCXX
-#	select LIBCXXABI
 	default n
 	---help---
 		Enable build for ZeroMQ library.
@@ -23,31 +22,16 @@ if ZEROMQ
 choice
 	prompt "I/O thread polling system"
 	default ZEROMQ_IO_EPOLL
-
-config ZEROMQ_IO_DEVPOLL
-	bool "devpoll"
-	---help---
-		Use 'devpoll' I/O thread polling system.
 		
 config ZEROMQ_IO_EPOLL
 	bool "epoll"
 	---help---
 		Use 'epoll' I/O thread polling system.
 
-config ZEROMQ_IO_EPOLL_CLOEXEC
-	bool "epoll with CLOEXEC"
-	---help---
-		Use 'epoll' I/O thread polling system with CLOEXEC.
-
 config ZEROMQ_IO_POLL
 	bool "poll"
 	---help---
 		Use 'poll' I/O thread polling system.
-
-config ZEROMQ_IO_POLLSET
-	bool "pollset"
-	---help---
-		Use 'pollset' I/O thread polling system.
 
 config ZEROMQ_IO_SELECT
 	bool "select"
@@ -56,37 +40,28 @@ config ZEROMQ_IO_SELECT
 
 endchoice
 
-choice
-	prompt "zmq_poll(er)_* API polling system"
-	default ZEROMQ_POLL_POLL
-
-config ZEROMQ_POLL_POLL
-	bool "poll"
+config ZEROMQ_IO_EPOLL_CLOEXEC
+	bool "Use EPOLL with CLOEXEC"
+	depends on ZEROMQ_IO_EPOLL
+	default y
 	---help---
-		Use 'poll' zmq_poll(er)_* API polling system.
-
-config ZEROMQ_POLL_SELECT
-	bool "select"
-	---help---
-		Use 'select' zmq_poll(er)_* API polling system.
-
-endchoice
+		Use 'epoll' I/O thread polling system with CLOEXEC.
 
 choice
 	prompt "condition variable implementation"
 	default ZEROMQ_COND_STL11
 
-config ZEROMQ_COND_NONE
+config ZEROMQ_CV_NONE
 	bool "none"
 	---help---
 		Use no condition variable implementation.
 
-config ZEROMQ_COND_PTHREAD
+config ZEROMQ_CV_PTHREADS
 	bool "pthread"
 	---help---
 		Use pthread condition variable implementation
 
-config ZEROMQ_COND_STL11
+config ZEROMQ_CV_STL11
 	bool "stl11"
 	---help---
 		Use stl11 condition variable implementation.
