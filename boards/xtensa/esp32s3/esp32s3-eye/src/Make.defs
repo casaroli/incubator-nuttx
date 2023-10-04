@@ -29,12 +29,28 @@ CSRCS += esp32s3_reset.c
 endif
 endif
 
+ifeq ($(CONFIG_ARCH_BUTTONS),y)
+CSRCS += esp32s3_buttons.c
+endif
+
 ifeq ($(CONFIG_ESP32S3_SPI),y)
 CSRCS += esp32s3_board_spi.c
 endif
 
 ifeq ($(CONFIG_ESP32S3_EYE_LCD),y)
 CSRCS += esp32s3_board_lcd.c
+endif
+
+ifeq ($(CONFIG_ESP32S3_TWAI),y)
+CSRCS += esp32s3_twai.c
+endif
+
+ifeq ($(CONFIG_DEV_GPIO),y)
+CSRCS += esp32s3_gpio.c
+endif
+
+ifeq ($(CONFIG_PWM),y)
+CSRCS += esp32s3_ledc.c
 endif
 
 DEPPATH += --dep-path board

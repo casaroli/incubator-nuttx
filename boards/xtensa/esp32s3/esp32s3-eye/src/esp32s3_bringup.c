@@ -62,6 +62,10 @@
 #  include "esp32s3_i2c.h"
 #endif
 
+#ifdef CONFIG_ESP32S3_I2S
+#  include "esp32s3_i2s.h"
+#endif
+
 #ifdef CONFIG_WATCHDOG
 #  include "esp32s3_board_wdt.h"
 #endif
@@ -77,6 +81,20 @@
 #ifdef CONFIG_LCD_DEV
 #  include <nuttx/board.h>
 #  include <nuttx/lcd/lcd_dev.h>
+#ifdef CONFIG_RTC_DRIVER
+#  include "esp32s3_rtc_lowerhalf.h"
+#endif
+
+#ifdef CONFIG_VIDEO_FB
+#include <nuttx/video/fb.h>
+#endif
+
+#ifdef CONFIG_ESP32S3_EFUSE
+#  include "esp32s3_efuse.h"
+#endif
+
+#ifdef CONFIG_ESP32S3_LEDC
+#  include "esp32s3_ledc.h"
 #endif
 
 #include "esp32s3-eye.h"
@@ -102,6 +120,19 @@
 int esp32s3_bringup(void)
 {
   int ret;
+#if (defined(CONFIG_ESP32S3_I2S0) && !defined(CONFIG_AUDIO_CS4344)) || \
+    defined(CONFIG_ESP32S3_I2S1)
+  bool i2s_enable_tx;
+  bool i2s_enable_rx;
+#endif
+
+#if defined(CONFIG_ESP32S3_EFUSE)
+  ret = esp32s3_efuse_initialize("/dev/efuse");
+  if (ret < 0)
+    {
+      syslog(LOG_ERR, "ERROR: Failed to init EFUSE: %d\n", ret);
+    }
+#endif
 
 #ifdef CONFIG_FS_PROCFS
   /* Mount the procfs file system */
@@ -124,6 +155,14 @@ int esp32s3_bringup(void)
     }
 #endif
 
+#ifdef CONFIG_ESP32S3_LEDC
+  ret = esp32s3_pwm_setup();
+  if (ret < 0)
+    {
+      syslog(LOG_ERR, "ERROR: esp32s3_pwm_setup() failed: %d\n", ret);
+    }
+#endif /* CONFIG_ESP32S3_LEDC */
+
 #ifdef CONFIG_ESP32S3_TIMER
   /* Configure general purpose timers */
 
@@ -139,6 +178,17 @@ int esp32s3_bringup(void)
   if (ret < 0)
     {
       syslog(LOG_ERR, "Failed to initialize RT timer: %d\n", ret);
+    }
+#endif
+
+#ifdef CONFIG_RTC_DRIVER
+  /* Instantiate the ESP32-S3 RTC driver */
+
+  ret = esp32s3_rtc_driverinit();
+  if (ret < 0)
+    {
+      syslog(LOG_ERR,
+             "ERROR: Failed to Instantiate the RTC driver: %d\n", ret);
     }
 #endif
 
@@ -161,6 +211,67 @@ int esp32s3_bringup(void)
       syslog(LOG_ERR, "Failed to initialize I2C driver: %d\n", ret);
     }
 #endif
+
+#ifdef CONFIG_ESP32S3_I2S
+
+#ifdef CONFIG_AUDIO_CS4344
+
+  /* Configure CS4344 audio on I2S0 */
+
+  ret = esp32s3_cs4344_initialize(ESP32S3_I2S0);
+  if (ret != OK)
+    {
+      syslog(LOG_ERR, "Failed to initialize CS4344 audio: %d\n", ret);
+    }
+#else
+
+#ifdef CONFIG_ESP32S3_I2S0_TX
+  i2s_enable_tx = true;
+#else
+  i2s_enable_tx = false;
+#endif /* CONFIG_ESP32S3_I2S0_TX */
+
+#ifdef CONFIG_ESP32S3_I2S0_RX
+  i2s_enable_rx = true;
+#else
+  i2s_enable_rx = false;
+#endif /* CONFIG_ESP32S3_I2S0_RX */
+
+  /* Configure I2S generic audio on I2S0 */
+
+  ret = board_i2sdev_initialize(ESP32S3_I2S0, i2s_enable_tx, i2s_enable_rx);
+  if (ret < 0)
+    {
+      syslog(LOG_ERR, "Failed to initialize I2S0 driver: %d\n", ret);
+    }
+#endif /* CONFIG_AUDIO_CS4344 */
+
+#ifdef CONFIG_ESP32S3_I2S1
+
+#ifdef CONFIG_ESP32S3_I2S1_TX
+  i2s_enable_tx = true;
+#else
+  i2s_enable_tx = false;
+#endif /* CONFIG_ESP32S3_I2S1_TX */
+
+#ifdef CONFIG_ESP32S3_I2S1_RX
+  i2s_enable_rx = true;
+#else
+  i2s_enable_rx = false;
+#endif /* CONFIG_ESP32S3_I2S1_RX */
+
+  /* Configure I2S generic audio on I2S1 */
+
+  ret = board_i2sdev_initialize(ESP32S3_I2S1, i2s_enable_tx, i2s_enable_rx);
+  if (ret < 0)
+    {
+      syslog(LOG_ERR, "Failed to initialize I2S%d driver: %d\n",
+             CONFIG_ESP32S3_I2S1, ret);
+    }
+
+#endif  /* CONFIG_ESP32S3_I2S1 */
+
+#endif /* CONFIG_ESP32S3_I2S */
 
 #ifdef CONFIG_INPUT_BUTTONS
   /* Register the BUTTON driver */
@@ -220,6 +331,20 @@ int esp32s3_bringup(void)
   if (ret < 0)
     {
       syslog(LOG_ERR, "ERROR: lcddev_register() failed: %d\n", ret);
+#ifdef CONFIG_DEV_GPIO
+  ret = esp32s3_gpio_init();
+  if (ret < 0)
+    {
+      syslog(LOG_ERR, "Failed to initialize GPIO Driver: %d\n", ret);
+    }
+#endif
+#endif
+
+#ifdef CONFIG_VIDEO_FB
+  ret = fb_register(0, 0);
+  if (ret < 0)
+    {
+      syslog(LOG_ERR, "ERROR: Failed to initialize Frame Buffer Driver.\n");
     }
 #endif
 
