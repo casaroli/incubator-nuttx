@@ -93,6 +93,19 @@
 #  include "esp32s3_efuse.h"
 #endif
 
+#ifdef CONFIG_ESP32S3_SPI
+#  include "esp32s3_spi.h"
+#endif
+
+#ifdef CONFIG_LCD_DEV
+#  include <nuttx/board.h>
+#  include <nuttx/lcd/lcd_dev.h>
+#endif
+
+// #ifdef CONFIG_LCD
+// #  include "esp32s3_st7789.h"
+// #endif
+
 #ifdef CONFIG_ESP32S3_LEDC
 #  include "esp32s3_ledc.h"
 #endif
@@ -154,14 +167,6 @@ int esp32s3_bringup(void)
              CONFIG_LIBC_TMPDIR, ret);
     }
 #endif
-
-#ifdef CONFIG_ESP32S3_LEDC
-  ret = esp32s3_pwm_setup();
-  if (ret < 0)
-    {
-      syslog(LOG_ERR, "ERROR: esp32s3_pwm_setup() failed: %d\n", ret);
-    }
-#endif /* CONFIG_ESP32S3_LEDC */
 
 #ifdef CONFIG_ESP32S3_TIMER
   /* Configure general purpose timers */
@@ -331,6 +336,9 @@ int esp32s3_bringup(void)
   if (ret < 0)
     {
       syslog(LOG_ERR, "ERROR: lcddev_register() failed: %d\n", ret);
+    }
+#endif
+
 #ifdef CONFIG_DEV_GPIO
   ret = esp32s3_gpio_init();
   if (ret < 0)
@@ -340,13 +348,35 @@ int esp32s3_bringup(void)
 #endif
 #endif
 
-#ifdef CONFIG_VIDEO_FB
-  ret = fb_register(0, 0);
+#ifdef CONFIG_ESP32S3_LEDC
+  ret = esp32s3_pwm_setup();
   if (ret < 0)
     {
-      syslog(LOG_ERR, "ERROR: Failed to initialize Frame Buffer Driver.\n");
+      syslog(LOG_ERR, "Failed to initialize LEDC Driver: %d\n", ret);
     }
 #endif
+
+#ifdef CONFIG_VIDEO_OV2640
+  ret = ov2640_camera_initialize();
+  if (ret < 0)
+    {
+      syslog(LOG_ERR, "Failed to initialize the OV2640: %d\n", ret);
+    }
+#endif
+
+// #ifdef CONFIG_VIDEO_FB
+//   ret = fb_register(0, 0);
+//   if (ret < 0)
+//     {
+//       syslog(LOG_ERR, "ERROR: Failed to initialize Frame Buffer Driver.\n");
+//     }
+// #elif defined(CONFIG_LCD)
+//   ret = board_lcd_initialize();
+//   if (ret < 0)
+//     {
+//       syslog(LOG_ERR, "ERROR: Failed to initialize LCD.\n");
+//     }
+// #endif
 
   /* If we got here then perhaps not all initialization was successful, but
    * at least enough succeeded to bring-up NSH with perhaps reduced

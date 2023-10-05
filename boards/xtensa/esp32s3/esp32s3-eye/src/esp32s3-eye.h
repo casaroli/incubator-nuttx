@@ -28,16 +28,27 @@
 #include <nuttx/config.h>
 #include <nuttx/compiler.h>
 #include <stdint.h>
+#include "esp32s3_spi.h"
 
 /****************************************************************************
  * Pre-processor Definitions
  ****************************************************************************/
+
+/* ESP32-S3-EYE GPIOs ****************************************************/
+
+/* BOOT Button */
+
+#define BUTTON_BOOT         0
 
 /* Display */
 
 #define ESP32S3_EYE_DISPLAY_SPI         2
 #define ESP32S3_EYE_DISPLAY_DC          43
 #define ESP32S3_EYE_DISPLAY_BCKL        48
+
+/* Camera */
+
+#define OV2640_BUS          0
 
 /****************************************************************************
  * Public Types
@@ -98,6 +109,45 @@ int board_spiflash_init(void);
 #endif
 
 /****************************************************************************
+ * Name: board_lcd_initialize
+ *
+ * Description:
+ *   Initialize the LCD video hardware. The initial state of the LCD is fully
+ *   initialized, display memory cleared, and the LCD ready to use, but with
+ *   the power setting at 0 (full off).
+ *
+ ****************************************************************************/
+
+#ifdef CONFIG_ESP32S3_EYE_LCD
+int board_lcd_initialize(void);
+#endif
+
+/****************************************************************************
+ * Name: board_lcd_getdev
+ *
+ * Description:
+ *   Return a reference to the LCD object for the specified LCD. This allows
+ *   support for multiple LCD devices.
+ *
+ ****************************************************************************/
+
+#ifdef CONFIG_ESP32S3_EYE_LCD
+struct lcd_dev_s *board_lcd_getdev(int lcddev);
+#endif
+
+/****************************************************************************
+ * Name: board_lcd_uninitialize
+ *
+ * Description:
+ *   Uninitialize the LCD support.
+ *
+ ****************************************************************************/
+
+#ifdef CONFIG_ESP32S3_EYE_LCD
+void board_lcd_uninitialize(void);
+#endif
+
+/****************************************************************************
  * Name: board_i2c_init
  *
  * Description:
@@ -154,6 +204,14 @@ int board_i2sdev_initialize(int port, bool enable_tx, bool enable_rx);
  *   returned to indicate the nature of the failure.
  *
  ****************************************************************************/
+
+#ifdef CONFIG_ESP32S3_LEDC
+int esp32s3_pwm_setup(void);
+#endif
+
+#ifdef CONFIG_VIDEO_OV2640
+int ov2640_camera_initialize(void);
+#endif
 
 #endif /* __ASSEMBLY__ */
 #endif /* __BOARDS_XTENSA_ESP32S3_ESP32S3_EYE_SRC_ESP32S3_EYE_H */
