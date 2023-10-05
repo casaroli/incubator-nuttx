@@ -34,7 +34,7 @@
 
 #include <arch/board/board.h>
 
-#include "esp32s3-devkit.h"
+#include "esp32s3-eye.h"
 #include "esp32s3_gpio.h"
 #include "hardware/esp32s3_gpio_sigmap.h"
 
@@ -52,19 +52,20 @@
  * used.
  */
 
-#define GPIO_OUT1    15
+#define GPIO_OUT1    3
+#define GPIO_OUT2   48
 
 /* Input pins. GPIO18 is used as an example, any other inputs could be
  * used.
  */
 
-#define GPIO_IN1     18
+#define GPIO_IN1     0
 
 /* Interrupt pins. GPIO21 is used as an example, any other inputs could be
  * used.
  */
 
-#define GPIO_IRQPIN1 21
+#define GPIO_IRQPIN1 0
 
 /****************************************************************************
  * Private Types
@@ -119,7 +120,8 @@ static const struct gpio_operations_s gpout_ops =
 
 static const uint32_t g_gpiooutputs[BOARD_NGPIOOUT] =
 {
-  GPIO_OUT1
+  GPIO_OUT1,
+  GPIO_OUT2
 };
 
 static struct esp32s3gpio_dev_s g_gpout[BOARD_NGPIOOUT];
@@ -359,7 +361,7 @@ int esp32s3_gpio_init(void)
 
       /* Configure the pins that will be used as INPUT */
 
-      esp32s3_configgpio(g_gpioinputs[i], INPUT_FUNCTION_2);
+      esp32s3_configgpio(g_gpioinputs[i], INPUT_FUNCTION_2 | PULLUP);
 
       pincount++;
     }
@@ -377,7 +379,7 @@ int esp32s3_gpio_init(void)
 
       /* Configure the pins that will be used as interrupt input */
 
-      esp32s3_configgpio(g_gpiointinputs[i], INPUT_FUNCTION_2 | PULLDOWN);
+      esp32s3_configgpio(g_gpiointinputs[i], INPUT_FUNCTION_2 | PULLUP);
 
       pincount++;
     }
