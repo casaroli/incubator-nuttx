@@ -1,5 +1,5 @@
 /****************************************************************************
- * boards/xtensa/esp32s3/esp32s3-devkit/src/esp32s3_buttons.c
+ * boards/xtensa/esp32s3/esp32s3-eye/src/esp32s3_buttons.c
  *
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
@@ -35,7 +35,7 @@
 #include "esp32s3_gpio.h"
 #include "hardware/esp32s3_gpio_sigmap.h"
 
-#include "esp32s3-devkit.h"
+#include "esp32s3-eye.h"
 
 /****************************************************************************
  * Public Functions
