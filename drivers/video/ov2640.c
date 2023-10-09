@@ -61,7 +61,6 @@
  ****************************************************************************/
 
 /* 7-bit I2C address.  Default: 0x21 */
-
 #ifndef CONFIG_OV2640_I2CADDR
 #  define CONFIG_OV2640_I2CADDR 0x21
 #endif
@@ -90,8 +89,8 @@
 #if defined(CONFIG_OV2640_QCIF_RESOLUTION) || \
     defined(CONFIG_OV2640_JPEG_QCIF_RESOLUTION)
 
-#  define OV2460_IMAGE_WIDTH  176
-#  define OV2460_IMAGE_HEIGHT 144
+#  define OV2640_IMAGE_WIDTH  176
+#  define OV2640_IMAGE_HEIGHT 144
 
 #  undef CONFIG_OV2640_QVGA_RESOLUTION
 #  undef CONFIG_OV2640_JPEG_QVGA_RESOLUTION
@@ -111,8 +110,8 @@
 #elif defined(CONFIG_OV2640_QVGA_RESOLUTION) || \
       defined(CONFIG_OV2640_JPEG_QVGA_RESOLUTION)
 
-#  define OV2460_IMAGE_WIDTH  320
-#  define OV2460_IMAGE_HEIGHT 240
+#  define OV2640_IMAGE_WIDTH  320
+#  define OV2640_IMAGE_HEIGHT 240
 
 #  undef CONFIG_OV2640_QCIF_RESOLUTION
 #  undef CONFIG_OV2640_JPEG_QCIF_RESOLUTION
@@ -132,8 +131,8 @@
 #elif defined(CONFIG_OV2640_CIF_RESOLUTION) || \
       defined(CONFIG_OV2640_JPEG_CIF_RESOLUTION)
 
-#  define OV2460_IMAGE_WIDTH  352
-#  define OV2460_IMAGE_HEIGHT  288
+#  define OV2640_IMAGE_WIDTH  352
+#  define OV2640_IMAGE_HEIGHT  288
 
 #  undef CONFIG_OV2640_QCIF_RESOLUTION
 #  undef CONFIG_OV2640_JPEG_QCIF_RESOLUTION
@@ -153,8 +152,8 @@
 #elif defined(CONFIG_OV2640_VGA_RESOLUTION) || \
       defined(CONFIG_OV2640_JPEG_VGA_RESOLUTION)
 
-#  define OV2460_IMAGE_WIDTH  640
-#  define OV2460_IMAGE_HEIGHT 480
+#  define OV2640_IMAGE_WIDTH  640
+#  define OV2640_IMAGE_HEIGHT 480
 
 #  undef CONFIG_OV2640_QCIF_RESOLUTION
 #  undef CONFIG_OV2640_JPEG_QCIF_RESOLUTION
@@ -174,8 +173,8 @@
 #elif defined(CONFIG_OV2640_SVGA_RESOLUTION) || \
       defined(CONFIG_OV2640_JPEG_SVGA_RESOLUTION)
 
-#  define OV2460_IMAGE_WIDTH  800
-#  define OV2460_IMAGE_HEIGHT 600
+#  define OV2640_IMAGE_WIDTH  800
+#  define OV2640_IMAGE_HEIGHT 600
 
 #  undef CONFIG_OV2640_QCIF_RESOLUTION
 #  undef CONFIG_OV2640_JPEG_QCIF_RESOLUTION
@@ -195,8 +194,8 @@
 #elif defined(CONFIG_OV2640_XVGA_RESOLUTION) || \
       defined(CONFIG_OV2640_JPEG_XVGA_RESOLUTION)
 
-#  define OV2460_IMAGE_WIDTH  1024
-#  define OV2460_IMAGE_HEIGHT 768
+#  define OV2640_IMAGE_WIDTH  1024
+#  define OV2640_IMAGE_HEIGHT 768
 
 #  undef CONFIG_OV2640_QCIF_RESOLUTION
 #  undef CONFIG_OV2640_JPEG_QCIF_RESOLUTION
@@ -216,8 +215,8 @@
 #elif defined(CONFIG_OV2640_SXGA_RESOLUTION) || \
       defined(CONFIG_OV2640_JPEG_SXVGA_RESOLUTION)
 
-#  define OV2460_IMAGE_WIDTH  1280
-#  define OV2460_IMAGE_HEIGHT 1024
+#  define OV2640_IMAGE_WIDTH  1280
+#  define OV2640_IMAGE_HEIGHT 1024
 
 #  undef CONFIG_OV2640_QCIF_RESOLUTION
 #  undef CONFIG_OV2640_JPEG_QCIF_RESOLUTION
@@ -237,8 +236,8 @@
 #elif defined(CONFIG_OV2640_UXGA_RESOLUTION) || \
       defined(CONFIG_OV2640_JPEG_UXGA_RESOLUTION)
 
-#  define OV2460_IMAGE_WIDTH  1600
-#  define OV2460_IMAGE_HEIGHT 1200
+#  define OV2640_IMAGE_WIDTH  1600
+#  define OV2640_IMAGE_HEIGHT 1200
 
 #  undef CONFIG_OV2640_QCIF_RESOLUTION
 #  undef CONFIG_OV2640_JPEG_QCIF_RESOLUTION
@@ -260,7 +259,6 @@
 #endif
 
 /* Chip identification */
-
 #define OVR2640_MANUFACTURER_IDL 0xa2
 #define OVR2640_MANUFACTURER_IDH 0x7f
 #define OVR2640_PRODUCT_IDL      0x42
@@ -286,7 +284,6 @@ struct ovr2640_reg_s
  ****************************************************************************/
 
 /* OV2640 register operations */
-
 static int     ov2640_putreg(FAR struct i2c_master_s *i2c, uint8_t regaddr,
                  uint8_t regval);
 static uint8_t ov2640_getreg(FAR struct i2c_master_s *i2c, uint8_t regaddr);
@@ -294,7 +291,6 @@ static int     ov2640_putreglist(FAR struct i2c_master_s *i2c,
                  FAR const struct ovr2640_reg_s *reglist, size_t nentries);
 
 /* Initialization */
-
 static int     ovr2640_chipid(FAR struct i2c_master_s *i2c);
 static int     ov2640_reset(FAR struct i2c_master_s *i2c);
 
@@ -303,7 +299,6 @@ static int     ov2640_reset(FAR struct i2c_master_s *i2c);
  ****************************************************************************/
 
 /* OV2640 reset */
-
 static const struct ovr2640_reg_s g_ov2640_reset[] =
 {
   {
@@ -317,7 +312,6 @@ static const struct ovr2640_reg_s g_ov2640_reset[] =
 
 #ifndef CONFIG_OV2640_JPEG
 /* Initial register settings */
-
 static const struct ovr2640_reg_s g_ov2640_initialregs[] =
 {
   {0xff, 0x00},
@@ -494,7 +488,6 @@ static const struct ovr2640_reg_s g_ov2640_initialregs[] =
 #define OV2640_INITIALREGS_NENTRIES ARRAY_NENTRIES(g_ov2640_initialregs)
 
 /* Resolution register settings */
-
 static const struct ovr2640_reg_s g_ov2640_resolution_common[] =
 {
   {0xff, 0x00},
@@ -617,7 +610,6 @@ static const struct ovr2640_reg_s g_ov2640_uxga_resolution[] =
 #endif
 
 /* Color format register settings */
-
 static const struct ovr2640_reg_s g_ov2640_colorfmt_common[] =
 {
   {0xff, 0x00},
@@ -884,7 +876,6 @@ static const struct ovr2640_reg_s g_ov2640_jpeg[] =
 #endif
 
 /* JPEG QCIF 176x144 */
-
 #ifdef CONFIG_OV2640_JPEG_QCIF_RESOLUTION
 static const struct ovr2640_reg_s g_ov2640_jpeg_qcif_resolution[] =
 {
@@ -933,7 +924,6 @@ static const struct ovr2640_reg_s g_ov2640_jpeg_qcif_resolution[] =
 #endif
 
 /* JPEG QVGA 320x240 */
-
 #ifdef CONFIG_OV2640_JPEG_QVGA_RESOLUTION
 static const struct ovr2640_reg_s g_ov2640_jpeg_qvga_resolution[] =
 {
@@ -982,7 +972,6 @@ static const struct ovr2640_reg_s g_ov2640_jpeg_qvga_resolution[] =
 #endif
 
 /* JPEG CIF 352x288 */
-
 #ifdef CONFIG_OV2640_JPEG_CIF_RESOLUTION
 static const struct ovr2640_reg_s g_ov2640_jpeg_cif_resolution[] =
 {
@@ -1031,7 +1020,6 @@ static const struct ovr2640_reg_s g_ov2640_jpeg_cif_resolution[] =
 #endif
 
 /* JPEG VGA 640x480 */
-
 #ifdef CONFIG_OV2640_JPEG_VGA_RESOLUTION
 static const struct ovr2640_reg_s g_ov2640_jpeg_vga_resolution[] =
 {
@@ -1081,7 +1069,6 @@ static const struct ovr2640_reg_s g_ov2640_jpeg_vga_resolution[] =
 #endif
 
 /* JPEG SVGA 800x600 */
-
 #ifdef CONFIG_OV2640_JPEG_SVGA_RESOLUTION
 static const struct ovr2640_reg_s g_ov2640_jpeg_svga_resolution[] =
 {
@@ -1131,7 +1118,6 @@ static const struct ovr2640_reg_s g_ov2640_jpeg_svga_resolution[] =
 #endif
 
 /* JPEG 1024x768 */
-
 #ifdef CONFIG_OV2640_JPEG_XVGA_RESOLUTION
 static const struct ovr2640_reg_s g_ov2640_jpeg_xvga_resolution[] =
 {
@@ -1179,7 +1165,6 @@ static const struct ovr2640_reg_s g_ov2640_jpeg_xvga_resolution[] =
 #endif
 
 /* JPEG 1280x1024 */
-
 #ifdef CONFIG_OV2640_JPEG_SXVGA_RESOLUTION
 static const struct ovr2640_reg_s g_ov2640_jpeg_sxvga_resolution[] =
 {
@@ -1229,7 +1214,6 @@ static const struct ovr2640_reg_s g_ov2640_jpeg_sxvga_resolution[] =
 #endif
 
 /* JPEG 1600x1200 */
-
 #ifdef CONFIG_OV2640_JPEG_UXGA_RESOLUTION
 static const struct ovr2640_reg_s g_ov2640_jpeg_uxga_resolution[] =
 {
@@ -1311,18 +1295,15 @@ static int ov2640_putreg(FAR struct i2c_master_s *i2c, uint8_t regaddr,
 #endif
 
   /* Set up for the transfer */
-
   buffer[0] = regaddr; /* Register address */
   buffer[1] = regval;  /* New register value */
 
   /* Set up the I2C configuration */
-
   config.frequency = CONFIG_OV2640_FREQUENCY;
   config.address   = CONFIG_OV2640_I2CADDR;
   config.addrlen   = 7;
 
   /* And do it */
-
   ret = i2c_write(i2c, &config, buffer, 2);
   if (ret < 0)
     {
@@ -1357,13 +1338,11 @@ static uint8_t ov2640_getreg(FAR struct i2c_master_s *i2c, uint8_t regaddr)
   int ret;
 
   /* Set up the I2C configuration */
-
   config.frequency = CONFIG_OV2640_FREQUENCY;
   config.address   = CONFIG_OV2640_I2CADDR;
   config.addrlen   = 7;
 
   /* Write the register address */
-
   ret = i2c_write(i2c, &config, &regaddr, 1);
   if (ret < 0)
     {
@@ -1452,7 +1431,6 @@ static int ovr2640_chipid(FAR struct i2c_master_s *i2c)
   int ret;
 
   /* Check and show product ID and manufacturer ID */
-
   ret = ov2640_putreg(i2c, 0xff, 0x01); /* Select the sensor address bank */
   if (ret < 0)
     {
@@ -1460,8 +1438,8 @@ static int ovr2640_chipid(FAR struct i2c_master_s *i2c)
       return ret;
     }
 
-  pidl = ov2640_getreg(i2c, 0x0a);      /* Product ID (MS) */
-  pidh = ov2640_getreg(i2c, 0x0b);      /* Product ID (LS) */
+  pidh = ov2640_getreg(i2c, 0x0a);      /* Product ID (MS) */
+  pidl = ov2640_getreg(i2c, 0x0b);      /* Product ID (LS) */
 
 #ifdef CONFIG_DEBUG_GRAPHICS
   midh = ov2640_getreg(i2c, 0x1c); /* Manufacturer ID (high) = 0x7f */
@@ -1471,14 +1449,14 @@ static int ovr2640_chipid(FAR struct i2c_master_s *i2c)
   if (pidl != OVR2640_PRODUCT_IDL || pidh != OVR2640_PRODUCT_IDH)
     {
 #ifdef CONFIG_DEBUG_GRAPHICS
-      gerr("ERROR: Unsupported PID=%02x$02x MID=%02x%02x\n",
+      gerr("ERROR: Unsupported PID=%02x%02x MID=%02x%02x\n",
             pidh, pidl, midh, midl);
 #endif
       return -ENOSYS;
     }
 
 #ifdef CONFIG_DEBUG_GRAPHICS
-  ginfo("PID=%02x$02x MID=%02x%02x\n", pidh, pidl, midh, midl);
+  ginfo("PID=%02x%02x MID=%02x%02x\n", pidh, pidl, midh, midl);
 #endif
   return OK;
 }
@@ -1538,8 +1516,7 @@ int ov2640_initialize(FAR struct i2c_master_s *i2c)
 {
   int ret;
 
-  /* Reset the OVR2640 */
-
+  /* Reset the OV2640 */
   ret = ov2640_reset(i2c);
   if (ret < 0)
     {
@@ -1548,7 +1525,6 @@ int ov2640_initialize(FAR struct i2c_master_s *i2c)
     }
 
   /* Check the CHIP ID */
-
   ret = ovr2640_chipid(i2c);
   if (ret < 0)
     {
@@ -1557,7 +1533,6 @@ int ov2640_initialize(FAR struct i2c_master_s *i2c)
     }
 
   /* Initialize the OV2640 hardware */
-
 #ifdef CONFIG_OV2640_JPEG
   /* Initialize for JPEG output */
 
@@ -1642,7 +1617,6 @@ int ov2640_initialize(FAR struct i2c_master_s *i2c)
 #else /* CONFIG_OV2640_JPEG */
 
   /* Setup initial register values */
-
   ret = ov2640_putreglist(i2c, g_ov2640_initialregs,
                           OV2640_INITIALREGS_NENTRIES);
   if (ret < 0)
@@ -1652,7 +1626,6 @@ int ov2640_initialize(FAR struct i2c_master_s *i2c)
     }
 
   /* Setup image resolution */
-
   ret = ov2640_putreglist(i2c, g_ov2640_resolution_common,
                           OV2640_RESOLUTION_COMMON_NENTRIES);
   if (ret < 0)
@@ -1732,6 +1705,7 @@ int ov2640_initialize(FAR struct i2c_master_s *i2c)
     }
 
 #endif /* CONFIG_OV2640_JPEG */
+  ginfo("Initialized the OV2640\n");
 
   return OK;
 
