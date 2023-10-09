@@ -48,6 +48,10 @@
 
 /* Camera */
 
+/* Typical OV2640 XVCLK is 24MHz */
+#define OV2640_FREQUENCY_MHZ 16
+
+/* Connected to I2C0 */
 #define OV2640_BUS          0
 
 /****************************************************************************
