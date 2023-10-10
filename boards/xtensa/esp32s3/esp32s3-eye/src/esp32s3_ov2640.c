@@ -99,12 +99,33 @@ static inline uint32_t max_common_divisor(uint32_t a, uint32_t b)
   return b;
 }
 
-int ov2640_camera_initialize(void)
+static int ov2640_config_gpio(void)
 {
   /* XCLK out */
   esp32s3_configgpio(15, OUTPUT);
   esp32s3_gpio_matrix_out(15, CAM_CLK_IDX, 0, 0);
 
+  /* PCLK, HREF, VSYNC */
+  esp32s3_configgpio(13, INPUT);
+  esp32s3_gpio_matrix_in(13, CAM_PCLK_IDX, 0);
+
+  esp32s3_configgpio(7, INPUT);
+  esp32s3_gpio_matrix_in(7, CAM_H_ENABLE_IDX, 0);
+
+  esp32s3_configgpio(6, INPUT);
+  esp32s3_gpio_matrix_in(6, CAM_V_SYNC_IDX, 0);
+
+  /* data pins */
+  int data_pins[8] = {
+    11, 9, 8, 10, 12, 18, 17, 16
+  };
+  for (int i = 0; i < 8; i++) {
+    esp32s3_configgpio(data_pins[i], INPUT);
+    esp32s3_gpio_matrix_in(data_pins[i], CAM_DATA_IN0_IDX + i, 0);
+  }
+}
+
+static int ov2640_config_cam(void) {
   /* Enable clock to peripheral */
   esp32s3_periph_module_enable(PERIPH_LCD_CAM_MODULE);
 
@@ -134,6 +155,12 @@ int ov2640_camera_initialize(void)
   ginfo("%" PRIx32 " <-%" PRIx32 "\n", LCD_CAM_CAM_CTRL_REG, regval);
   putreg32(regval, LCD_CAM_CAM_CTRL_REG);
 
+}
+
+int ov2460_start_cam(void)
+{
+  uint32_t regval;
+
   /* Update CAM parameters before start */
   regval  = getreg32(LCD_CAM_CAM_CTRL_REG);
   ginfo("%" PRIx32 " ->%" PRIx32 "\n", LCD_CAM_CAM_CTRL_REG, regval);
@@ -147,6 +174,16 @@ int ov2640_camera_initialize(void)
   regval |= LCD_CAM_CAM_START_M;
   ginfo("%" PRIx32 " <-%" PRIx32 "\n", LCD_CAM_CAM_CTRL_REG, regval);
   putreg32(regval, LCD_CAM_CAM_CTRL1_REG);
+}
+
+int ov2640_camera_initialize(void)
+{
+
+  ov2640_config_gpio();
+
+  ov2640_config_cam();
+
+  ov2460_start_cam();
 
   /* Init I2C */
   struct i2c_master_s *i2c = esp32s3_i2cbus_initialize(OV2640_BUS);
