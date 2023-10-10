@@ -90,8 +90,8 @@
 #if defined(CONFIG_OV2640_QCIF_RESOLUTION) || \
     defined(CONFIG_OV2640_JPEG_QCIF_RESOLUTION)
 
-#  define OV2460_IMAGE_WIDTH  176
-#  define OV2460_IMAGE_HEIGHT 144
+#  define OV2640_IMAGE_WIDTH  176
+#  define OV2640_IMAGE_HEIGHT 144
 
 #  undef CONFIG_OV2640_QVGA_RESOLUTION
 #  undef CONFIG_OV2640_JPEG_QVGA_RESOLUTION
@@ -111,8 +111,8 @@
 #elif defined(CONFIG_OV2640_QVGA_RESOLUTION) || \
       defined(CONFIG_OV2640_JPEG_QVGA_RESOLUTION)
 
-#  define OV2460_IMAGE_WIDTH  320
-#  define OV2460_IMAGE_HEIGHT 240
+#  define OV2640_IMAGE_WIDTH  320
+#  define OV2640_IMAGE_HEIGHT 240
 
 #  undef CONFIG_OV2640_QCIF_RESOLUTION
 #  undef CONFIG_OV2640_JPEG_QCIF_RESOLUTION
@@ -132,8 +132,8 @@
 #elif defined(CONFIG_OV2640_CIF_RESOLUTION) || \
       defined(CONFIG_OV2640_JPEG_CIF_RESOLUTION)
 
-#  define OV2460_IMAGE_WIDTH  352
-#  define OV2460_IMAGE_HEIGHT  288
+#  define OV2640_IMAGE_WIDTH  352
+#  define OV2640_IMAGE_HEIGHT  288
 
 #  undef CONFIG_OV2640_QCIF_RESOLUTION
 #  undef CONFIG_OV2640_JPEG_QCIF_RESOLUTION
@@ -153,8 +153,8 @@
 #elif defined(CONFIG_OV2640_VGA_RESOLUTION) || \
       defined(CONFIG_OV2640_JPEG_VGA_RESOLUTION)
 
-#  define OV2460_IMAGE_WIDTH  640
-#  define OV2460_IMAGE_HEIGHT 480
+#  define OV2640_IMAGE_WIDTH  640
+#  define OV2640_IMAGE_HEIGHT 480
 
 #  undef CONFIG_OV2640_QCIF_RESOLUTION
 #  undef CONFIG_OV2640_JPEG_QCIF_RESOLUTION
@@ -174,8 +174,8 @@
 #elif defined(CONFIG_OV2640_SVGA_RESOLUTION) || \
       defined(CONFIG_OV2640_JPEG_SVGA_RESOLUTION)
 
-#  define OV2460_IMAGE_WIDTH  800
-#  define OV2460_IMAGE_HEIGHT 600
+#  define OV2640_IMAGE_WIDTH  800
+#  define OV2640_IMAGE_HEIGHT 600
 
 #  undef CONFIG_OV2640_QCIF_RESOLUTION
 #  undef CONFIG_OV2640_JPEG_QCIF_RESOLUTION
@@ -195,8 +195,8 @@
 #elif defined(CONFIG_OV2640_XVGA_RESOLUTION) || \
       defined(CONFIG_OV2640_JPEG_XVGA_RESOLUTION)
 
-#  define OV2460_IMAGE_WIDTH  1024
-#  define OV2460_IMAGE_HEIGHT 768
+#  define OV2640_IMAGE_WIDTH  1024
+#  define OV2640_IMAGE_HEIGHT 768
 
 #  undef CONFIG_OV2640_QCIF_RESOLUTION
 #  undef CONFIG_OV2640_JPEG_QCIF_RESOLUTION
@@ -216,8 +216,8 @@
 #elif defined(CONFIG_OV2640_SXGA_RESOLUTION) || \
       defined(CONFIG_OV2640_JPEG_SXVGA_RESOLUTION)
 
-#  define OV2460_IMAGE_WIDTH  1280
-#  define OV2460_IMAGE_HEIGHT 1024
+#  define OV2640_IMAGE_WIDTH  1280
+#  define OV2640_IMAGE_HEIGHT 1024
 
 #  undef CONFIG_OV2640_QCIF_RESOLUTION
 #  undef CONFIG_OV2640_JPEG_QCIF_RESOLUTION
@@ -237,8 +237,8 @@
 #elif defined(CONFIG_OV2640_UXGA_RESOLUTION) || \
       defined(CONFIG_OV2640_JPEG_UXGA_RESOLUTION)
 
-#  define OV2460_IMAGE_WIDTH  1600
-#  define OV2460_IMAGE_HEIGHT 1200
+#  define OV2640_IMAGE_WIDTH  1600
+#  define OV2640_IMAGE_HEIGHT 1200
 
 #  undef CONFIG_OV2640_QCIF_RESOLUTION
 #  undef CONFIG_OV2640_JPEG_QCIF_RESOLUTION
@@ -1460,8 +1460,8 @@ static int ovr2640_chipid(FAR struct i2c_master_s *i2c)
       return ret;
     }
 
-  pidl = ov2640_getreg(i2c, 0x0a);      /* Product ID (MS) */
-  pidh = ov2640_getreg(i2c, 0x0b);      /* Product ID (LS) */
+  pidh = ov2640_getreg(i2c, 0x0a);      /* Product ID (MS) */
+  pidl = ov2640_getreg(i2c, 0x0b);      /* Product ID (LS) */
 
 #ifdef CONFIG_DEBUG_GRAPHICS
   midh = ov2640_getreg(i2c, 0x1c); /* Manufacturer ID (high) = 0x7f */
@@ -1471,14 +1471,14 @@ static int ovr2640_chipid(FAR struct i2c_master_s *i2c)
   if (pidl != OVR2640_PRODUCT_IDL || pidh != OVR2640_PRODUCT_IDH)
     {
 #ifdef CONFIG_DEBUG_GRAPHICS
-      gerr("ERROR: Unsupported PID=%02x$02x MID=%02x%02x\n",
+      gerr("ERROR: Unsupported PID=%02x%02x MID=%02x%02x\n",
             pidh, pidl, midh, midl);
 #endif
       return -ENOSYS;
     }
 
 #ifdef CONFIG_DEBUG_GRAPHICS
-  ginfo("PID=%02x$02x MID=%02x%02x\n", pidh, pidl, midh, midl);
+  ginfo("PID=%02x%02x MID=%02x%02x\n", pidh, pidl, midh, midl);
 #endif
   return OK;
 }
@@ -1538,7 +1538,7 @@ int ov2640_initialize(FAR struct i2c_master_s *i2c)
 {
   int ret;
 
-  /* Reset the OVR2640 */
+  /* Reset the OV2640 */
 
   ret = ov2640_reset(i2c);
   if (ret < 0)
@@ -1732,6 +1732,8 @@ int ov2640_initialize(FAR struct i2c_master_s *i2c)
     }
 
 #endif /* CONFIG_OV2640_JPEG */
+
+  ginfo("Initialized the OV2640\n");
 
   return OK;
 
