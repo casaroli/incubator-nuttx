@@ -1,5 +1,5 @@
 /****************************************************************************
- * boards/xtensa/esp32s3/esp32s3-eye/src/esp32s3-eye.h
+ * boards/xtensa/esp32s3/esp32s3-eye/src/esp32s3_board_spi.c
  *
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
@@ -18,84 +18,109 @@
  *
  ****************************************************************************/
 
-#ifndef __BOARDS_XTENSA_ESP32S3_ESP32S3_EYE_SRC_ESP32S3_EYE_H
-#define __BOARDS_XTENSA_ESP32S3_ESP32S3_EYE_SRC_ESP32S3_EYE_H
-
 /****************************************************************************
  * Included Files
  ****************************************************************************/
 
 #include <nuttx/config.h>
-#include <nuttx/compiler.h>
+
 #include <stdint.h>
+#include <stdbool.h>
+#include <debug.h>
+
+#include <nuttx/spi/spi.h>
+
+#include "esp32s3_gpio.h"
+#include "esp32s3-eye.h"
 
 /****************************************************************************
- * Pre-processor Definitions
- ****************************************************************************/
-
-/* Display */
-
-#define ESP32S3_EYE_DISPLAY_SPI         2
-#define ESP32S3_EYE_DISPLAY_DC          43
-#define ESP32S3_EYE_DISPLAY_BCKL        48
-
-/****************************************************************************
- * Public Types
+ * Private Functions
  ****************************************************************************/
 
 /****************************************************************************
- * Public Data
- ****************************************************************************/
-
-#ifndef __ASSEMBLY__
-
-/****************************************************************************
- * Public Function Prototypes
+ * Public Functions
  ****************************************************************************/
 
 /****************************************************************************
- * Name: esp32s3_bringup
- *
- * Description:
- *   Perform architecture-specific initialization
- *
- *   CONFIG_BOARD_LATE_INITIALIZE=y :
- *     Called from board_late_initialize().
- *
- *   CONFIG_BOARD_LATE_INITIALIZE=y && CONFIG_BOARDCTL=y :
- *     Called from the NSH library via board_app_initialize()
- *
+ * Name: esp32s3_spi2_status
  ****************************************************************************/
 
-int esp32s3_bringup(void);
+#ifdef CONFIG_ESP32S3_SPI2
 
-/****************************************************************************
- * Name: board_spiflash_init
- *
- * Description:
- *   Initialize the SPIFLASH and register the MTD device.
- *
- ****************************************************************************/
+uint8_t esp32s3_spi2_status(struct spi_dev_s *dev, uint32_t devid)
+{
+  uint8_t status = 0;
 
-#ifdef CONFIG_ESP32S3_SPIFLASH
-int board_spiflash_init(void);
+  return status;
+}
+
 #endif
 
 /****************************************************************************
- * Name: board_i2c_init
- *
- * Description:
- *   Configure the I2C driver.
- *
- * Returned Value:
- *   Zero (OK) is returned on success; A negated errno value is returned
- *   to indicate the nature of any failure.
- *
+ * Name: esp32s3_spi2_cmddata
  ****************************************************************************/
 
-#ifdef CONFIG_I2C_DRIVER
-int board_i2c_init(void);
+#if defined(CONFIG_ESP32S3_SPI2) && defined(CONFIG_SPI_CMDDATA)
+
+int esp32s3_spi2_cmddata(struct spi_dev_s *dev, uint32_t devid, bool cmd)
+{
+  if (devid == SPIDEV_DISPLAY(0))
+    {
+      /*  This is the Data/Command control pad which determines whether the
+       *  data bits are data or a command.
+       */
+
+      esp32s3_gpiowrite(ESP32S3_EYE_DISPLAY_DC, !cmd);
+
+      return OK;
+    }
+
+  spiinfo("devid: %" PRIu32 " CMD: %s\n", devid, cmd ? "command" :
+          "data");
+
+  return -ENODEV;
+}
+
 #endif
 
-#endif /* __ASSEMBLY__ */
-#endif /* __BOARDS_XTENSA_ESP32S3_ESP32S3_EYE_SRC_ESP32S3_EYE_H */
+/****************************************************************************
+ * Name: esp32s3_spi3_status
+ ****************************************************************************/
+
+#ifdef CONFIG_ESP32S3_SPI3
+
+uint8_t esp32s3_spi3_status(struct spi_dev_s *dev, uint32_t devid)
+{
+  uint8_t status = 0;
+
+  return status;
+}
+
+#endif
+
+/****************************************************************************
+ * Name: esp32s3_spi3_cmddata
+ ****************************************************************************/
+
+#if defined(CONFIG_ESP32S3_SPI3) && defined(CONFIG_SPI_CMDDATA)
+
+int esp32s3_spi3_cmddata(struct spi_dev_s *dev, uint32_t devid, bool cmd)
+{
+  if (devid == SPIDEV_DISPLAY(0))
+    {
+      /*  This is the Data/Command control pad which determines whether the
+       *  data bits are data or a command.
+       */
+
+      esp32s3_gpiowrite(CONFIG_ESP32S3_SPI3_MISOPIN, !cmd);
+
+      return OK;
+    }
+
+  spiinfo("devid: %" PRIu32 " CMD: %s\n", devid, cmd ? "command" :
+          "data");
+
+  return -ENODEV;
+}
+
+#endif
