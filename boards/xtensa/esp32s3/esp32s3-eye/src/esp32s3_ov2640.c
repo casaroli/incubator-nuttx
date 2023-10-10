@@ -27,6 +27,8 @@
 
 #include <stdlib.h>
 #include <debug.h>
+// printf
+#include <stdio.h>
 
 #include <nuttx/i2c/i2c_master.h>
 #include <nuttx/video/fb.h>
@@ -44,6 +46,7 @@
 #include "hardware/esp32s3_system.h"
 #include "hardware/esp32s3_gpio_sigmap.h"
 #include "hardware/esp32s3_lcd_cam.h"
+#include "hardware/esp32s3_dma.h"
 
 #include "esp32s3-eye.h"
 
@@ -51,7 +54,8 @@
  * Pre-processor Definitions
  ****************************************************************************/
 
-#if CONFIG_ESP32S3_DEFAULT_CPU_FREQ_240 && (OV2640_FREQUENCY_MHZ % 3) == 0
+#if CONFIG_ESP32S3_DEFAULT_CPU_FREQ_240 && \
+  (CONFIG_ESP32S3_EYE_CAM_XCLK_MHZ % 3) == 0
   /* Use PLL=240MHz as clock resource */
 #  define ESP32S3_CAM_CLK_SEL   2
 #  define ESP32S3_CAM_CLK_MHZ   240
@@ -62,13 +66,22 @@
 #endif
 
 #define ESP32S3_CAM_CLK_N         (ESP32S3_CAM_CLK_MHZ / \
-                                   OV2640_FREQUENCY_MHZ)
+                                   CONFIG_ESP32S3_EYE_CAM_XCLK_MHZ)
 #define ESP32S3_CAM_CLK_RES       (ESP32S3_CAM_CLK_MHZ % \
-                                   OV2640_FREQUENCY_MHZ)
+                                   CONFIG_ESP32S3_EYE_CAM_XCLK_MHZ)
+
+#define ESP32S3_CAM_FB_SIZE (640*480*2)
+
+#define ESP32S3_CAM_DMADESC_NUM   (ESP32S3_CAM_FB_SIZE / \
+                                   ESP32S3_DMA_DATALEN_MAX + 1)
 
 /****************************************************************************
  * Private Data
  ****************************************************************************/
+
+static int dma_channel;
+static void *framebuffer;
+struct esp32s3_dmadesc_s dma_descriptors[ESP32S3_CAM_DMADESC_NUM];
 
 /****************************************************************************
  * Private Functions
@@ -104,7 +117,7 @@ static inline uint32_t max_common_divisor(uint32_t a, uint32_t b)
 }
 
 /****************************************************************************
- * Name: cam_interrupt
+ * Name: dma_isr
  *
  * Description:
  *   Start sending next frame to LCD.
@@ -119,82 +132,80 @@ static inline uint32_t max_common_divisor(uint32_t a, uint32_t b)
  *
  ****************************************************************************/
 
-static int IRAM_ATTR cam_interrupt(int irq, void *context, void *arg)
+static int IRAM_ATTR dma_isr(int irq, void *context, void *arg)
 {
-  uint32_t regval;
-  // struct esp32s3_lcd_s *priv = &g_lcd_priv;
+  uint32_t status = getreg32(DMA_IN_INT_ST_CH0_REG + (0xc0 * dma_channel));
+
+  putreg32(status, DMA_IN_INT_CLR_CH0_REG + (0xc0 * dma_channel));
+
+  if (status & DMA_IN_SUC_EOF_CH0_INT_ST_M)
+    {
+      ginfo("DMA ISR!\n");
+
+      ginfo("DMA ISR descnum=%d\n", ESP32S3_CAM_DMADESC_NUM);
+      for (int i = 0; i < 10; i++) {
+        ginfo("DMA descr[%d].pbuf=%x\n", i, dma_descriptors[i].pbuf);
+
+        char bigstring[200];
+        sprintf(bigstring, "data:");
+        for (int k = 0; k < 10; k++) {
+          sprintf(bigstring+strlen(bigstring), " %02x ", dma_descriptors[i].pbuf[k]);
+        }
+        sprintf(bigstring+strlen(bigstring), "\n");
+        ginfo("%s", bigstring);
+      }
+
+    }
+  else {
+      gerr("Unknown ISR status%x!\n", status);
+
+  }
+  return 0;
+}
+
+/****************************************************************************
+ * Name: cam_isr
+ *
+ * Description:
+ *   Start sending next frame to LCD.
+ *
+ * Input Parameters:
+ *   irq     - The IRQ number of the interrupt.
+ *   context - The register state save array at the time of the interrupt.
+ *   arg     - Not used
+ *
+ * Returned Value:
+ *   Zero on success; a negated errno on failure
+ *
+ ****************************************************************************/
+
+static int IRAM_ATTR cam_isr(int irq, void *context, void *arg)
+{
   uint32_t status = getreg32(LCD_CAM_LC_DMA_INT_ST_REG);
 
   putreg32(status, LCD_CAM_LC_DMA_INT_CLR_REG);
 
   if (status & LCD_CAM_CAM_VSYNC_INT_ST_M)
     {
-      // ginfo("VSYNC ISR!\n");
+      ginfo("VSYNC ISR!\n");
     }
-  else {
-      gerr("Unknown ISR status%x!\n", status);
-
-  }
-#if 0
-  if (status & LCD_CAM_LCD_VSYNC_INT_ST_M)
+  else
     {
-      /* Stop TX */
-
-      regval  = esp32s3_lcd_getreg(LCD_CAM_LCD_USER_REG);
-      regval &= ~LCD_CAM_LCD_START_M;
-      esp32s3_lcd_putreg(LCD_CAM_LCD_USER_REG, regval);
-
-      regval  = esp32s3_lcd_getreg(LCD_CAM_LCD_USER_REG);
-      regval |= LCD_CAM_LCD_UPDATE_REG_M;
-      esp32s3_lcd_putreg(LCD_CAM_LCD_USER_REG, regval);
-
-      /* Clear TX fifo */
-
-      regval  = esp32s3_lcd_getreg(LCD_CAM_LCD_MISC_REG);
-      regval |= LCD_CAM_LCD_AFIFO_RESET_M;
-      esp32s3_lcd_putreg(LCD_CAM_LCD_MISC_REG, regval);
-
-#if ESP32S3_LCD_LAYERS > 1
-      priv->cur_layer = (priv->cur_layer + 1) % ESP32S3_LCD_LAYERS;
-
-      esp32s3_dma_load(CURRENT_LAYER(priv)->dmadesc,
-                       priv->dma_channel,
-                       true);
-#endif
-
-#ifndef CONFIG_FB_UPDATE
-      /* Write framebuffer data from D-cache to PSRAM */
-
-      cache_writeback_addr(CURRENT_LAYER(priv)->framebuffer,
-                           ESP32S3_LCD_FB_SIZE);
-#endif
-
-      /* Enable DMA TX */
-
-      esp32s3_dma_enable(priv->dma_channel, true);
-
-      /* Update LCD parameters and start TX */
-
-      regval  = esp32s3_lcd_getreg(LCD_CAM_LCD_USER_REG);
-      regval |= LCD_CAM_LCD_UPDATE_REG_M;
-      esp32s3_lcd_putreg(LCD_CAM_LCD_USER_REG, regval);
-
-      regval  = esp32s3_lcd_getreg(LCD_CAM_LCD_USER_REG);
-      regval |= LCD_CAM_LCD_START_M;
-      esp32s3_lcd_putreg(LCD_CAM_LCD_USER_REG, regval);
+      gerr("Unknown ISR status=%x!\n", status);
     }
-#endif
+
   return 0;
 }
-
 
 static int ov2640_gpio_config(void)
 {
   /* XCLK out */
+
   esp32s3_configgpio(15, OUTPUT);
   esp32s3_gpio_matrix_out(15, CAM_CLK_IDX, 0, 0);
 
   /* PCLK, HREF, VSYNC */
+
   esp32s3_configgpio(13, INPUT);
   esp32s3_gpio_matrix_in(13, CAM_PCLK_IDX, 0);
 
@@ -205,29 +216,36 @@ static int ov2640_gpio_config(void)
   esp32s3_gpio_matrix_in(6, CAM_V_SYNC_IDX, 0);
 
   /* data pins */
+
   int data_pins[8] = {
     11, 9, 8, 10, 12, 18, 17, 16
   };
+
   for (int i = 0; i < 8; i++) {
     esp32s3_configgpio(data_pins[i], INPUT);
     esp32s3_gpio_matrix_in(data_pins[i], CAM_DATA_IN0_IDX + i, 0);
   }
+
+  return 0;
 }
 
 static int ov2640_cam_config(void) {
+
   /* Enable clock to peripheral */
+
   esp32s3_periph_module_enable(PERIPH_LCD_CAM_MODULE);
 
   /* Config XCLK */
+
   uint32_t regval;
   uint32_t clk_a;
   uint32_t clk_b;
 
 #if ESP32S3_CAM_CLK_RES != 0
   uint32_t divisor = max_common_divisor(ESP32S3_CAM_CLK_RES,
-                                        CONFIG_ESP32S3_CAM_CLOCK_MHZ);
+                                        CONFIG_ESP32S3_EYE_CAM_XCLK_MHZ);
   clk_b = ESP32S3_CAM_CLK_RES / divisor;
-  clk_a = CONFIG_ESP32S3_CAM_CLOCK_MHZ / divisor;
+  clk_a = CONFIG_ESP32S3_EYE_CAM_XCLK_MHZ / divisor;
 
   ginfo("divisor=%d\n", divisor);
 #else
@@ -246,7 +264,7 @@ static int ov2640_cam_config(void) {
   putreg32(regval, LCD_CAM_CAM_CTRL_REG);
 
   regval = LCD_CAM_CAM_VSYNC_FILTER_EN_M |
-          ((4092-1) << LCD_CAM_CAM_REC_DATA_BYTELEN_S) |
+         ((4092-1) << LCD_CAM_CAM_REC_DATA_BYTELEN_S) |
           (ESP32S3_CAM_CLK_N << LCD_CAM_CAM_CLKM_DIV_NUM_S) |
           (clk_a << LCD_CAM_CAM_CLKM_DIV_A_S) |
           (clk_b << LCD_CAM_CAM_CLKM_DIV_B_S);
@@ -255,12 +273,6 @@ static int ov2640_cam_config(void) {
 
   // TODO: converter?
 
-}
-
-static int ov2460_cam_start(void)
-{
-  uint32_t regval;
-
   /* Update CAM parameters before start */
   regval  = getreg32(LCD_CAM_CAM_CTRL_REG);
   ginfo("%" PRIx32 " ->%" PRIx32 "\n", LCD_CAM_CAM_CTRL_REG, regval);
@@ -268,108 +280,172 @@ static int ov2460_cam_start(void)
   ginfo("%" PRIx32 " <-%" PRIx32 "\n", LCD_CAM_CAM_CTRL_REG, regval);
   putreg32(regval, LCD_CAM_CAM_CTRL_REG);
 
-  /* Start CAM */
+  /* Reset Rx and FIFO */
   regval  = getreg32(LCD_CAM_CAM_CTRL1_REG);
   ginfo("%" PRIx32 " ->%" PRIx32 "\n", LCD_CAM_CAM_CTRL_REG, regval);
-  regval |= LCD_CAM_CAM_START_M;
+  regval |= LCD_CAM_CAM_RESET_M | LCD_CAM_CAM_AFIFO_RESET_M;
   ginfo("%" PRIx32 " <-%" PRIx32 "\n", LCD_CAM_CAM_CTRL_REG, regval);
   putreg32(regval, LCD_CAM_CAM_CTRL1_REG);
+
+  //   GDMA.channel[cam->dma_num].in.conf0.in_rst = 1;
+  //   GDMA.channel[cam->dma_num].in.conf0.in_rst = 0;
+
+  return 0;
 }
 
-static int ov2460_cam_init_isr(void)
+static int ov2640_cam_init_isr(void)
 {
   spinlock_t lock;
   int flags = spin_lock_irqsave(&lock);
 
   int cpu = up_cpu_index();
 
-  // TODO: DMA
-  // 	esp_err_t ret = ESP_OK;
-  //   ret = esp_intr_alloc_intrstatus(gdma_periph_signals.groups[0].pairs[cam->dma_num].rx_irq_id,
-  //                                    ESP_INTR_FLAG_LOWMED | ESP_INTR_FLAG_SHARED | ESP_INTR_FLAG_IRAM,
-  //                                    (uint32_t)&GDMA.channel[cam->dma_num].in.int_st, GDMA_IN_SUC_EOF_CH0_INT_ST_M,
-  //                                    ll_cam_dma_isr, cam, &cam->dma_intr_handle);
-  //   if (ret != ESP_OK) {
-  //       ESP_LOGE(TAG, "DMA interrupt allocation of camera failed");
-	// 	return ret;
-	// }
+  int cpuint;
+  int attach;
 
-  /* VSYNC */
-  int cpuint = esp32s3_setup_irq(cpu,
-                                   ESP32S3_PERIPH_LCD_CAM,
-                                   ESP32S3_INT_PRIO_DEF,
-                                   ESP32S3_CPUINT_LEVEL);
+  /* DMA */
+
+  cpuint = esp32s3_setup_irq(cpu,
+                             ESP32S3_PERIPH_DMA_IN_CH0 + dma_channel,
+                             ESP32S3_INT_PRIO_DEF,
+                             ESP32S3_CPUINT_LEVEL);
+
   DEBUGASSERT(cpuint >= 0);
 
-  int attach = irq_attach(ESP32S3_IRQ_LCD_CAM, cam_interrupt, 0);
+  attach = irq_attach(ESP32S3_IRQ_DMA_IN_CH0 + dma_channel, dma_isr, 0);
+  DEBUGASSERT(attach == 0);
+
+  /* VSYNC */
+
+  cpuint = esp32s3_setup_irq(cpu,
+                             ESP32S3_PERIPH_LCD_CAM,
+                             ESP32S3_INT_PRIO_DEF,
+                             ESP32S3_CPUINT_LEVEL);
+  DEBUGASSERT(cpuint >= 0);
+
+  attach = irq_attach(ESP32S3_IRQ_LCD_CAM, cam_isr, 0);
   DEBUGASSERT(attach == 0);
 
   spin_unlock_irqrestore(&lock, flags);
 
-  uint32_t regval = LCD_CAM_CAM_VSYNC_INT_ENA_M;
+  uint32_t regval;
+
+  /* DMA */
+
+  regval = DMA_IN_SUC_EOF_CH0_INT_ENA_M;
+  putreg32(regval, DMA_IN_INT_ENA_CH0_REG);
+
+  /* VSYNC */
+
+  regval = LCD_CAM_CAM_VSYNC_INT_ENA_M;
   putreg32(regval, LCD_CAM_LC_DMA_INT_ENA_REG);
+
+  return 0;
 }
 
 static int ov2640_dma_init(void) {
-  // struct esp32s3_lcd_s *priv = &g_lcd_priv;
 
   esp32s3_dma_init();
 
-  int dma_channel = esp32s3_dma_request(ESP32S3_DMA_PERIPH_LCDCAM,
-                                          10, 1, true);
-  DEBUGASSERT(dma_channel >= 0);
+  dma_channel = esp32s3_dma_request(ESP32S3_DMA_PERIPH_LCDCAM,
+                                    10, 1, false);
 
+  ginfo("Allocated DMA channel %d\n", dma_channel);
+  DEBUGASSERT(dma_channel >= 0);
 
   // esp32s3_dma_set_ext_memblk(dma_channel,
   //                            true,
   //                            ESP32S3_DMA_EXT_MEMBLK_64B);
 
-  // for (int i = 0; i < ESP32S3_LCD_LAYERS; i++)
-  //   {
-  //     struct esp32s3_layer_s *layer = &priv->layer[i];
+  framebuffer = memalign(64, ESP32S3_CAM_FB_SIZE);
+  DEBUGASSERT(framebuffer != NULL);
+  memset(framebuffer, 0, ESP32S3_CAM_FB_SIZE);
 
-  //     layer->framebuffer = memalign(64, ESP32S3_LCD_FB_SIZE);
-  //     DEBUGASSERT(layer->framebuffer != NULL);
-  //     memset(layer->framebuffer, 0, ESP32S3_LCD_FB_SIZE);
+  esp32s3_dma_setup(dma_descriptors,
+                    ESP32S3_CAM_DMADESC_NUM,
+                    framebuffer,
+                    ESP32S3_CAM_FB_SIZE,
+                    false);
 
-  //     esp32s3_dma_setup(layer->dmadesc,
-  //                       ESP32S3_LCD_DMADESC_NUM,
-  //                       layer->framebuffer,
-  //                       ESP32S3_LCD_FB_SIZE,
-  //                       true);
-  //   }
+  return 0;
+}
 
+static int ov2640_cam_start(void)
+{
+  uint32_t regval;
 
+  /* Load DMA */
+  esp32s3_dma_load(dma_descriptors, dma_channel, false);
+
+  /* Start DMA */
+  esp32s3_dma_enable(dma_channel, false);
+
+  /* Start CAM */
+  regval  = getreg32(LCD_CAM_CAM_CTRL1_REG);
+  ginfo("%" PRIx32 " ->%" PRIx32 "\n", LCD_CAM_CAM_CTRL_REG, regval);
+  regval |= LCD_CAM_CAM_START_M;
+  ginfo("%" PRIx32 " <-%" PRIx32 "\n", LCD_CAM_CAM_CTRL_REG, regval);
+  putreg32(regval, LCD_CAM_CAM_CTRL1_REG);
+
+  return 0;
 }
 
 int ov2640_camera_initialize(void)
 {
+  int ret;
 
-  ov2640_gpio_config();
+  ret = ov2640_gpio_config();
+  if (ret > 0)
+  {
+    gerr("ERROR: Failed on ov2640_gpio_config\n");
+    return EXIT_FAILURE;
+  }
 
-  ov2640_cam_config();
-
-  ov2460_cam_start();
-
-  // TODO: dma init
-
-  ov2460_cam_init_isr();
+  ret = ov2640_cam_config();
+  if (ret > 0)
+  {
+    gerr("ERROR: Failed on ov2640_cam_config\n");
+    return EXIT_FAILURE;
+  }
 
   /* Init I2C */
-  struct i2c_master_s *i2c = esp32s3_i2cbus_initialize(OV2640_BUS);
+  struct i2c_master_s *i2c = esp32s3_i2cbus_initialize(ESP32S3_EYE_CAM_I2C_BUS);
   if (!i2c)
   {
-    gerr("ERROR: Failed to initialize TWI%d\n", OV2640_BUS);
+    gerr("ERROR: Failed to initialize I2C %d\n", ESP32S3_EYE_CAM_I2C_BUS);
     return EXIT_FAILURE;
   }
 
   /* Init OV2640 */
-  int ret = ov2640_initialize(i2c);
+  ret = ov2640_initialize(i2c);
   if (ret < 0)
     {
       gerr("ERROR: Failed to initialize the OV2640: %d\n", ret);
       return EXIT_FAILURE;
     }
+
+  ret = ov2640_dma_init();
+  if (ret > 0)
+  {
+    gerr("ERROR: Failed on ov2640_dma_init\n");
+    return EXIT_FAILURE;
+  }
+
+  ret = ov2640_cam_init_isr();
+  if (ret > 0)
+  {
+    gerr("ERROR: Failed on ov2640_cam_init_isr\n");
+    return EXIT_FAILURE;
+  }
+
+  ginfo("will start camera ov2640_cam_start\n");
+  ret = ov2640_cam_start();
+  if (ret > 0)
+  {
+    gerr("ERROR: Failed on ov2640_cam_start\n");
+    return EXIT_FAILURE;
+  }
+
   return EXIT_SUCCESS;
 }
 

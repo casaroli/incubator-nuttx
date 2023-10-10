@@ -56,7 +56,26 @@ config ESP32S3_EYE_LCD
 	select LCD
 	select LCD_DEV
 	select LCD_ST7789
+	# select LCD_PORTRAIT
+	# select LV_COLOR_16_SWAP
 	---help---
 		Enable board LCD support, IC is LCD_ST7789V. 
+
+config ESP32S3_EYE_CAM
+	bool "Enable ESP32-S3 camera"
+	default n
+	select VIDEO
+	select I2C_RESET
+	select ESP32S3_DMA
+	---help---
+		Enable board camera support, IC is OV2640. 
+
+if ESP32S3_EYE_CAM
+
+config ESP32S3_EYE_CAM_XCLK_MHZ
+	int "ESP32-S3-EYE camera XCLK in MHz"
+	default 24
+
+endif # ESP32S3_EYE_CAM
 
 endif # ARCH_BOARD_ESP32S3_EYE

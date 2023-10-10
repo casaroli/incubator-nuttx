@@ -38,11 +38,16 @@
 /* BOOT Button */
 
 #define BUTTON_BOOT         0
+
 /* Display */
 
 #define ESP32S3_EYE_DISPLAY_SPI         2
 #define ESP32S3_EYE_DISPLAY_DC          43
 #define ESP32S3_EYE_DISPLAY_BCKL        48
+
+/* Camera */
+
+#define ESP32S3_EYE_CAM_I2C_BUS 0
 
 /****************************************************************************
  * Public Types
@@ -155,6 +160,26 @@ void board_lcd_uninitialize(void);
 
 #ifdef CONFIG_I2C_DRIVER
 int board_i2c_init(void);
+#endif
+
+/****************************************************************************
+ * Name: board_gpio_init
+ *
+ * Description:
+ *   Configure the GPIO driver.
+ *
+ * Returned Value:
+ *   Zero (OK) is returned on success; A negated errno value is returned
+ *   to indicate the nature of any failure.
+ *
+ ****************************************************************************/
+
+#ifdef CONFIG_DEV_GPIO
+int esp32s3_gpio_init(void);
+#endif
+
+#ifdef CONFIG_VIDEO_OV2640
+int ov2640_camera_initialize(void);
 #endif
 
 #endif /* __ASSEMBLY__ */
