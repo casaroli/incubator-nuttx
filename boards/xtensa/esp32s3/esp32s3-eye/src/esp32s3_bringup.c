@@ -58,6 +58,15 @@
 #  include <nuttx/input/buttons.h>
 #endif
 
+#ifdef CONFIG_ESP32S3_SPI
+#  include "esp32s3_spi.h"
+#endif
+
+#ifdef CONFIG_LCD_DEV
+#  include <nuttx/board.h>
+#  include <nuttx/lcd/lcd_dev.h>
+#endif
+
 #include "esp32s3-eye.h"
 
 /****************************************************************************
@@ -156,6 +165,20 @@ int esp32s3_bringup(void)
   if (ret)
     {
       syslog(LOG_ERR, "ERROR: Failed to initialize SPI Flash\n");
+    }
+#endif
+
+#ifdef CONFIG_ESP32S3_EYE_LCD
+  ret = board_lcd_initialize();
+  if (ret < 0)
+    {
+      syslog(LOG_ERR, "ERROR: board_lcd_initialize() failed: %d\n", ret);
+    }
+
+  ret = lcddev_register(0);
+  if (ret < 0)
+    {
+      syslog(LOG_ERR, "ERROR: lcddev_register() failed: %d\n", ret);
     }
 #endif
 
