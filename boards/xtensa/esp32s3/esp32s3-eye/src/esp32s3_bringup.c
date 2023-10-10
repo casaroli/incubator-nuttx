@@ -365,11 +365,13 @@ int esp32s3_bringup(void)
 #endif
 
 // #ifdef CONFIG_VIDEO_FB
-//   ret = fb_register(0, 0);
-//   if (ret < 0)
-//     {
-//       syslog(LOG_ERR, "ERROR: Failed to initialize Frame Buffer Driver.\n");
-//     }
+// up_fbinitialize(0);
+
+  // ret = fb_register(0, 0);
+  // if (ret < 0)
+  //   {
+  //     syslog(LOG_ERR, "ERROR: Failed to initialize Frame Buffer Driver.\n");
+  //   }
 // #elif defined(CONFIG_LCD)
 //   ret = board_lcd_initialize();
 //   if (ret < 0)
