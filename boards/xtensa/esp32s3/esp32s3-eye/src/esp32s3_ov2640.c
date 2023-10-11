@@ -83,6 +83,8 @@ static int dma_channel;
 static void *framebuffer;
 struct esp32s3_dmadesc_s dma_descriptors[ESP32S3_CAM_DMADESC_NUM];
 
+static sem_t g_sem;
+
 /****************************************************************************
  * Private Functions
  ****************************************************************************/
@@ -155,6 +157,7 @@ static int IRAM_ATTR dma_isr(int irq, void *context, void *arg)
         ginfo("%s", bigstring);
       }
 
+  sem_post(&g_sem);
     }
   else {
       gerr("Unknown ISR status%x!\n", status);
@@ -162,6 +165,8 @@ static int IRAM_ATTR dma_isr(int irq, void *context, void *arg)
   }
   return 0;
 }
+
+int ov2640_cam_stop(void);
 
 /****************************************************************************
  * Name: cam_isr
@@ -188,6 +193,7 @@ static int IRAM_ATTR cam_isr(int irq, void *context, void *arg)
   if (status & LCD_CAM_CAM_VSYNC_INT_ST_M)
     {
       ginfo("VSYNC ISR!\n");
+      ov2640_cam_stop();
     }
   else
     {
@@ -370,9 +376,32 @@ static int ov2640_dma_init(void) {
   return 0;
 }
 
-static int ov2640_cam_start(void)
+int ov2640_cam_stop(void)
 {
   uint32_t regval;
+
+  // /* Load DMA */
+  // esp32s3_dma_load(dma_descriptors, dma_channel, false);
+
+  // /* Start DMA */
+  // esp32s3_dma_enable(dma_channel, false);
+
+  /* Stop CAM */
+  regval  = getreg32(LCD_CAM_CAM_CTRL1_REG);
+  ginfo("%" PRIx32 " ->%" PRIx32 "\n", LCD_CAM_CAM_CTRL_REG, regval);
+  regval &= ~LCD_CAM_CAM_START_M;
+  ginfo("%" PRIx32 " <-%" PRIx32 "\n", LCD_CAM_CAM_CTRL_REG, regval);
+  putreg32(regval, LCD_CAM_CAM_CTRL1_REG);
+
+  return 0;
+}
+
+
+int ov2640_cam_start(void** fb)
+{
+  uint32_t regval;
+
+  sem_init(&g_sem, 0, 0);
 
   /* Load DMA */
   esp32s3_dma_load(dma_descriptors, dma_channel, false);
@@ -386,6 +415,9 @@ static int ov2640_cam_start(void)
   regval |= LCD_CAM_CAM_START_M;
   ginfo("%" PRIx32 " <-%" PRIx32 "\n", LCD_CAM_CAM_CTRL_REG, regval);
   putreg32(regval, LCD_CAM_CAM_CTRL1_REG);
+
+  sem_wait(&g_sem);
+  *fb = framebuffer;
 
   return 0;
 }
@@ -438,13 +470,13 @@ int ov2640_camera_initialize(void)
     return EXIT_FAILURE;
   }
 
-  ginfo("will start camera ov2640_cam_start\n");
-  ret = ov2640_cam_start();
-  if (ret > 0)
-  {
-    gerr("ERROR: Failed on ov2640_cam_start\n");
-    return EXIT_FAILURE;
-  }
+  // ginfo("will start camera ov2640_cam_start\n");
+  // ret = ov2640_cam_start();
+  // if (ret > 0)
+  // {
+  //   gerr("ERROR: Failed on ov2640_cam_start\n");
+  //   return EXIT_FAILURE;
+  // }
 
   return EXIT_SUCCESS;
 }
