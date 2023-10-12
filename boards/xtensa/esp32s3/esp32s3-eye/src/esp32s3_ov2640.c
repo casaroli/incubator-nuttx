@@ -88,6 +88,14 @@ static sem_t g_sem;
 /****************************************************************************
  * Private Functions
  ****************************************************************************/
+static int ov2640_cam_stop(void);
+static int ov2640_cam_start(void);
+
+static enum {
+  IDLE,
+  WAIT_FOR_VSYNC,
+  WAIT_FOR_DMA
+ } state = IDLE;
 
 /****************************************************************************
  * Name: max_common_divisor
@@ -141,23 +149,20 @@ static int IRAM_ATTR dma_isr(int irq, void *context, void *arg)
   putreg32(status, DMA_IN_INT_CLR_CH0_REG + (0xc0 * dma_channel));
 
   if (status & DMA_IN_SUC_EOF_CH0_INT_ST_M)
+  {
+      ginfo("DMA ISR EOF!\n");
+
+      ov2640_cam_stop();
+
+      sem_post(&g_sem);
+  }
+  else if (status & DMA_IN_DONE_CH0_INT_ST_M)
     {
-      ginfo("DMA ISR!\n");
+      ginfo("DMA ISR DONE!\n");
 
-      ginfo("DMA ISR descnum=%d\n", ESP32S3_CAM_DMADESC_NUM);
-      for (int i = 0; i < 10; i++) {
-        ginfo("DMA descr[%d].pbuf=%x\n", i, dma_descriptors[i].pbuf);
+      ov2640_cam_stop();
 
-        char bigstring[200];
-        sprintf(bigstring, "data:");
-        for (int k = 0; k < 10; k++) {
-          sprintf(bigstring+strlen(bigstring), " %02x ", dma_descriptors[i].pbuf[k]);
-        }
-        sprintf(bigstring+strlen(bigstring), "\n");
-        ginfo("%s", bigstring);
-      }
-
-  sem_post(&g_sem);
+      sem_post(&g_sem);
     }
   else {
       gerr("Unknown ISR status%x!\n", status);
@@ -165,8 +170,6 @@ static int IRAM_ATTR dma_isr(int irq, void *context, void *arg)
   }
   return 0;
 }
-
-int ov2640_cam_stop(void);
 
 /****************************************************************************
  * Name: cam_isr
@@ -193,7 +196,44 @@ static int IRAM_ATTR cam_isr(int irq, void *context, void *arg)
   if (status & LCD_CAM_CAM_VSYNC_INT_ST_M)
     {
       ginfo("VSYNC ISR!\n");
-      ov2640_cam_stop();
+        int regval;
+
+
+if (state == IDLE) {
+      ginfo("Wait for Vsync\n");
+      state = WAIT_FOR_VSYNC;
+}
+else if (state == WAIT_FOR_VSYNC) {
+      ginfo("STARTING DMA\n");
+      state = WAIT_FOR_DMA;
+
+        /* Reset Rx and FIFO */
+
+        regval  = getreg32(LCD_CAM_CAM_CTRL1_REG);
+        ginfo("%" PRIx32 " ->%" PRIx32 "\n", LCD_CAM_CAM_CTRL_REG, regval);
+        regval |= LCD_CAM_CAM_RESET_M | LCD_CAM_CAM_AFIFO_RESET_M;
+        ginfo("%" PRIx32 " <-%" PRIx32 "\n", LCD_CAM_CAM_CTRL_REG, regval);
+        putreg32(regval, LCD_CAM_CAM_CTRL1_REG);
+
+  /* DMA */
+
+  // regval = DMA_IN_RST_CH0_M;
+  // putreg32(regval, DMA_IN_CONF0_CH0_REG);
+
+    // putreg32(DMA_IN_SUC_EOF_CH0_INT_ST_M, DMA_IN_INT_CLR_CH0_REG + (0xc0 * dma_channel));
+
+
+       ginfo("%03d (0x%08x)\n", 0, dma_descriptors->ctrl);
+       ginfo("%03d (0x%08x)\n", ESP32S3_CAM_DMADESC_NUM-1, dma_descriptors[ESP32S3_CAM_DMADESC_NUM-1].ctrl);
+
+        /* Load DMA */
+
+        esp32s3_dma_load(dma_descriptors, dma_channel, false);
+
+        /* Start DMA */
+        
+        esp32s3_dma_enable(dma_channel, false);
+}
     }
   else
     {
@@ -261,7 +301,9 @@ static int ov2640_cam_config(void) {
   ginfo("XCLK=%d/(%d + %d/%d)\n", ESP32S3_CAM_CLK_MHZ,
           ESP32S3_CAM_CLK_N, clk_b, clk_a);
 
-  regval = (4 << LCD_CAM_CAM_VSYNC_FILTER_THRES_S) |
+  regval = 
+          // LCD_CAM_CAM_VS_EOF_EN_M | 
+          (4 << LCD_CAM_CAM_VSYNC_FILTER_THRES_S) |
           (ESP32S3_CAM_CLK_SEL << LCD_CAM_CAM_CLK_SEL_S) |
           (ESP32S3_CAM_CLK_N << LCD_CAM_CAM_CLKM_DIV_NUM_S) |
           (clk_a << LCD_CAM_CAM_CLKM_DIV_A_S) |
@@ -338,7 +380,9 @@ static int ov2640_cam_init_isr(void)
 
   /* DMA */
 
-  regval = DMA_IN_SUC_EOF_CH0_INT_ENA_M;
+  // regval = DMA_IN_SUC_EOF_CH0_INT_ENA_M;
+  regval = DMA_IN_DONE_CH0_INT_ENA_M;
+  // regval = DMA_IN_SUC_EOF_CH0_INT_ENA_M | DMA_IN_DONE_CH0_INT_ENA_M;
   putreg32(regval, DMA_IN_INT_ENA_CH0_REG);
 
   /* VSYNC */
@@ -376,17 +420,12 @@ static int ov2640_dma_init(void) {
   return 0;
 }
 
-int ov2640_cam_stop(void)
+static int ov2640_cam_stop(void)
 {
   uint32_t regval;
 
-  // /* Load DMA */
-  // esp32s3_dma_load(dma_descriptors, dma_channel, false);
-
-  // /* Start DMA */
-  // esp32s3_dma_enable(dma_channel, false);
-
   /* Stop CAM */
+
   regval  = getreg32(LCD_CAM_CAM_CTRL1_REG);
   ginfo("%" PRIx32 " ->%" PRIx32 "\n", LCD_CAM_CAM_CTRL_REG, regval);
   regval &= ~LCD_CAM_CAM_START_M;
@@ -397,27 +436,41 @@ int ov2640_cam_stop(void)
 }
 
 
-int ov2640_cam_start(void** fb)
+static int ov2640_cam_start(void)
 {
   uint32_t regval;
 
-  sem_init(&g_sem, 0, 0);
-
-  /* Load DMA */
-  esp32s3_dma_load(dma_descriptors, dma_channel, false);
-
-  /* Start DMA */
-  esp32s3_dma_enable(dma_channel, false);
-
   /* Start CAM */
+
   regval  = getreg32(LCD_CAM_CAM_CTRL1_REG);
   ginfo("%" PRIx32 " ->%" PRIx32 "\n", LCD_CAM_CAM_CTRL_REG, regval);
   regval |= LCD_CAM_CAM_START_M;
   ginfo("%" PRIx32 " <-%" PRIx32 "\n", LCD_CAM_CAM_CTRL_REG, regval);
   putreg32(regval, LCD_CAM_CAM_CTRL1_REG);
 
+        //   /* Load DMA */
+
+        esp32s3_dma_load(dma_descriptors, dma_channel, false);
+
+        /* Start DMA */
+        
+        // esp32s3_dma_enable(dma_channel, false);
+
+
+  return 0;
+}
+
+int ov2640_snap(struct esp32s3_dmadesc_s ** desc)
+{
+  sem_init(&g_sem, 0, 0);
+ 
+  state = IDLE;
+
+  ov2640_cam_start();
+
   sem_wait(&g_sem);
-  *fb = framebuffer;
+ 
+  *desc = dma_descriptors;
 
   return 0;
 }
