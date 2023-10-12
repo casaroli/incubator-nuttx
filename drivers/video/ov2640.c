@@ -643,7 +643,10 @@ static const struct ovr2640_reg_s g_ov2640_rgb565_colorfmt[] =
   {0xda, 0x09},
   {0xd7, 0x03},
   {0xe0, 0x00},
-  {0x05, 0x00}
+  {0x05, 0x00},
+  {0xff, 0x01},
+  {0x12, 0x06},
+
 };
 #define OV2640_RGB565_COLORFMT_NENTRIES ARRAY_NENTRIES(g_ov2640_rgb565_colorfmt)
 
