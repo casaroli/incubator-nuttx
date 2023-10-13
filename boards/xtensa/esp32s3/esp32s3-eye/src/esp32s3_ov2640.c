@@ -72,10 +72,14 @@
 #define ESP32S3_CAM_CLK_RES       (ESP32S3_CAM_CLK_MHZ % \
                                    CONFIG_ESP32S3_EYE_CAM_XCLK_MHZ)
 
-#define ESP32S3_CAM_FB_SIZE (320*300*2)
+#define ESP32S3_CAM_FB_SIZE (OV2640_IMAGE_WIDTH*300*2)
 
 #undef ESP32S3_DMA_DATALEN_MAX
-#define ESP32S3_DMA_DATALEN_MAX 1280
+#define ESP32S3_DMA_DATALEN_MAX (2560)
+
+#if (ESP32S3_CAM_FB_SIZE % ESP32S3_DMA_DATALEN_MAX) > 0
+#error must be multiple
+#endif
 
 #define ESP32S3_CAM_DMADESC_NUM   (ESP32S3_CAM_FB_SIZE / \
                                    ESP32S3_DMA_DATALEN_MAX + 1)
@@ -174,7 +178,7 @@ static int IRAM_ATTR dma_isr(int irq, void *context, void *arg)
 
     ginfo("Last descriptor is %08x!\n", regvalue);
 
-    if ((void *)regvalue == &dma_descriptors[(320*240*2/1280)-1])
+    if ((void *)regvalue == &dma_descriptors[(320*2*OV2640_IMAGE_HEIGHT/ESP32S3_DMA_DATALEN_MAX)-1])
       {
         ginfo("LAST ISR");
 
