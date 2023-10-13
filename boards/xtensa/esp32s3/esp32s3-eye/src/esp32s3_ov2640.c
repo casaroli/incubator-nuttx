@@ -177,7 +177,13 @@ static int IRAM_ATTR dma_isr(int irq, void *context, void *arg)
     if ((void *)regvalue == &dma_descriptors[(320*240*2/1280)-1])
       {
         ginfo("LAST ISR");
+
+      /* Stop DMA */
+      
+        esp32s3_dma_disable(dma_channel, false);
+
         ov2640_cam_stop();
+
         sem_post(&g_sem);
       }
   }
@@ -453,6 +459,8 @@ static int ov2640_cam_start(void)
   regval  = getreg32(LCD_CAM_CAM_CTRL1_REG);
   regval |= LCD_CAM_CAM_RESET_M | LCD_CAM_CAM_AFIFO_RESET_M;
   putreg32(regval, LCD_CAM_CAM_CTRL1_REG);
+
+  memset(framebuffer, 0xff, ESP32S3_CAM_FB_SIZE);
 
   // /* Reset DMA */
 
