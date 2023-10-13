@@ -167,6 +167,9 @@ int32_t esp32s3_dma_request(enum esp32s3_dma_periph_e periph,
 uint32_t esp32s3_dma_setup(struct esp32s3_dmadesc_s *dmadesc, uint32_t num,
                            uint8_t *pbuf, uint32_t len, bool tx);
 
+uint32_t esp32s3_dma_setup2(struct esp32s3_dmadesc_s *dmadesc, uint32_t num,
+                           uint8_t *pbuf, uint32_t len, bool tx, uint32_t dsize);
+
 /****************************************************************************
  * Name: esp32s3_dma_load
  *

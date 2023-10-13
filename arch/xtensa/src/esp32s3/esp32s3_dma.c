@@ -246,6 +246,67 @@ uint32_t esp32s3_dma_setup(struct esp32s3_dmadesc_s *dmadesc, uint32_t num,
   return len - bytes;
 }
 
+uint32_t esp32s3_dma_setup2(struct esp32s3_dmadesc_s *dmadesc, uint32_t num,
+                           uint8_t *pbuf, uint32_t len, bool tx, uint32_t dsize)
+{
+  int i;
+  uint32_t regval;
+  uint32_t bytes = len;
+  uint8_t *pdata = pbuf;
+  uint32_t data_len;
+  uint32_t buf_len;
+
+  DEBUGASSERT(dmadesc != NULL);
+  DEBUGASSERT(num > 0);
+  DEBUGASSERT(pbuf != NULL);
+  DEBUGASSERT(len > 0);
+
+  for (i = 0; i < num; i++)
+    {
+      data_len = MIN(bytes, dsize);
+
+      /* Buffer length must be rounded to next 32-bit boundary. */
+
+      buf_len = ALIGN_UP(data_len, sizeof(uintptr_t));
+
+      dmadesc[i].ctrl = ESP32S3_DMA_CTRL_OWN;
+
+      /* Only set Data Length if it's a TX buffer. Otherwise, it will be
+       * written automatically by hardware.
+       */
+
+      if (tx)
+        {
+          dmadesc[i].ctrl |= (data_len << ESP32S3_DMA_CTRL_DATALEN_S);
+        }
+
+      dmadesc[i].ctrl |= (buf_len << ESP32S3_DMA_CTRL_BUFLEN_S);
+      dmadesc[i].pbuf = pdata;
+      dmadesc[i].next = &dmadesc[i + 1];
+
+      bytes -= data_len;
+      if (bytes == 0)
+        {
+          break;
+        }
+
+      pdata += data_len;
+    }
+
+  /* suc_eof (defined by ESP32S3_DMA_CTRL_EOF) is set by software
+   * only in transmit descriptor.
+   */
+
+  if (tx)
+    {
+      dmadesc[i].ctrl |= ESP32S3_DMA_CTRL_EOF;
+    }
+
+  dmadesc[i].next  = NULL;
+
+  return len - bytes;
+}
+
 /****************************************************************************
  * Name: esp32s3_dma_load
  *
@@ -462,4 +523,3 @@ void esp32s3_dma_init(void)
 
   nxmutex_unlock(&g_dma_lock);
 }
-
