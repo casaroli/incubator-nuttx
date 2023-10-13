@@ -51,7 +51,7 @@
 #include "esp32s3-eye.h"
 
 #undef CONFIG_ESP32S3_EYE_CAM_XCLK_MHZ
-#define CONFIG_ESP32S3_EYE_CAM_XCLK_MHZ 10
+#define CONFIG_ESP32S3_EYE_CAM_XCLK_MHZ 15
 /****************************************************************************
  * Pre-processor Definitions
  ****************************************************************************/
@@ -72,10 +72,10 @@
 #define ESP32S3_CAM_CLK_RES       (ESP32S3_CAM_CLK_MHZ % \
                                    CONFIG_ESP32S3_EYE_CAM_XCLK_MHZ)
 
-#define ESP32S3_CAM_FB_SIZE (320*240*2)
+#define ESP32S3_CAM_FB_SIZE (320*300*2)
 
 #undef ESP32S3_DMA_DATALEN_MAX
-#define ESP32S3_DMA_DATALEN_MAX 639
+#define ESP32S3_DMA_DATALEN_MAX 1279
 
 #define ESP32S3_CAM_DMADESC_NUM   (ESP32S3_CAM_FB_SIZE / \
                                    ESP32S3_DMA_DATALEN_MAX + 1)
@@ -101,7 +101,7 @@ static enum {
   WAIT_FOR_VSYNC,
   WAIT_FOR_DMA,
   WAIT_FOR_NEXT,
- } state = IDLE;
+ } state = WAIT_FOR_VSYNC;
 
 /****************************************************************************
  * Name: max_common_divisor
@@ -172,16 +172,20 @@ uint32_t ov2640_getreg32(const char *func, uint32_t addr) {
 static int IRAM_ATTR dma_isr(int irq, void *context, void *arg)
 {
   uint32_t status = getreg32(DMA_IN_INT_ST_CH0_REG + (0xc0 * dma_channel));
-
-
   putreg32(status, DMA_IN_INT_CLR_CH0_REG + (0xc0 * dma_channel));
 
   if (status & DMA_IN_SUC_EOF_CH0_INT_ST_M)
   {
       ginfo("DMA ISR EOF!\n");
 
-      getreg32(DMA_IN_SUC_EOF_DES_ADDR_CH0_REG + (0xc0 * dma_channel));
+      uint32_t regvalue = getreg32(DMA_IN_SUC_EOF_DES_ADDR_CH0_REG + (0xc0 * dma_channel));
 
+    if ((void *)regvalue == &dma_descriptors[(320*240*2/1280)-1]) {
+      ginfo("LAST ISR");
+          ov2640_cam_stop();
+          sem_post(&g_sem);
+
+    }
 
       /* Reset DMA */
 
@@ -275,7 +279,7 @@ static int IRAM_ATTR cam_isr(int irq, void *context, void *arg)
           regval |= LCD_CAM_CAM_RESET_M | LCD_CAM_CAM_AFIFO_RESET_M;
           putreg32(regval, LCD_CAM_CAM_CTRL1_REG);
 
-          /* Reset DMA */
+          /* Reset DMA channel */
 
           regval = DMA_IN_RST_CH0_M | DMA_IN_DATA_BURST_EN_CH0;
           putreg32(regval, DMA_IN_CONF0_CH0_REG + (0xc0 * dma_channel));
@@ -301,10 +305,10 @@ static int IRAM_ATTR cam_isr(int irq, void *context, void *arg)
       else if (state == WAIT_FOR_NEXT)
         {
           ginfo("WAIT_FOR_NEXT -> IDLE\n");
-          state = IDLE;
-          ov2640_cam_stop();
+          state = WAIT_FOR_VSYNC;
+          // ov2640_cam_stop();
 
-          sem_post(&g_sem);
+          // sem_post(&g_sem);
         }
     }
   // else
@@ -561,7 +565,7 @@ int ov2640_snap(struct esp32s3_dmadesc_s ** desc)
 {
   sem_init(&g_sem, 0, 0);
  
-  state = IDLE;
+  state = WAIT_FOR_VSYNC;
 
  ov2640_cam_start();
 
