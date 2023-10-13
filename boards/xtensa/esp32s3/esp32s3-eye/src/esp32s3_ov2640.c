@@ -75,7 +75,7 @@
 #define ESP32S3_CAM_FB_SIZE (320*300*2)
 
 #undef ESP32S3_DMA_DATALEN_MAX
-#define ESP32S3_DMA_DATALEN_MAX 1279
+#define ESP32S3_DMA_DATALEN_MAX 1280
 
 #define ESP32S3_CAM_DMADESC_NUM   (ESP32S3_CAM_FB_SIZE / \
                                    ESP32S3_DMA_DATALEN_MAX + 1)
@@ -311,8 +311,7 @@ static int ov2640_cam_config(void) {
           ESP32S3_CAM_CLK_N, clk_b, clk_a);
 
   regval = 
-          // LCD_CAM_CAM_VS_EOF_EN_M | 
-          LCD_CAM_CAM_LINE_INT_EN_M |
+          LCD_CAM_CAM_VS_EOF_EN_M | 
           (4 << LCD_CAM_CAM_VSYNC_FILTER_THRES_S) |
           (ESP32S3_CAM_CLK_SEL << LCD_CAM_CAM_CLK_SEL_S) |
           (ESP32S3_CAM_CLK_N << LCD_CAM_CAM_CLKM_DIV_NUM_S) |
@@ -321,9 +320,6 @@ static int ov2640_cam_config(void) {
   putreg32(regval, LCD_CAM_CAM_CTRL_REG);
 
   regval = LCD_CAM_CAM_VSYNC_FILTER_EN_M |
-         ((3840-1) << LCD_CAM_CAM_REC_DATA_BYTELEN_S) |
-         ((5) << LCD_CAM_CAM_LINE_INT_NUM_S) |
-        //  ((40000-1) << LCD_CAM_CAM_REC_DATA_BYTELEN_S) |
           (ESP32S3_CAM_CLK_N << LCD_CAM_CAM_CLKM_DIV_NUM_S) |
           (clk_a << LCD_CAM_CAM_CLKM_DIV_A_S) |
           (clk_b << LCD_CAM_CAM_CLKM_DIV_B_S);
@@ -332,11 +328,13 @@ static int ov2640_cam_config(void) {
   // TODO: converter?
 
   /* Update CAM parameters before start */
+
   regval  = getreg32(LCD_CAM_CAM_CTRL_REG);
   regval |= LCD_CAM_CAM_UPDATE_REG_M;
   putreg32(regval, LCD_CAM_CAM_CTRL_REG);
 
   /* Reset Rx and FIFO */
+
   regval  = getreg32(LCD_CAM_CAM_CTRL1_REG);
   regval |= LCD_CAM_CAM_RESET_M | LCD_CAM_CAM_AFIFO_RESET_M;
   putreg32(regval, LCD_CAM_CAM_CTRL1_REG);
@@ -384,13 +382,10 @@ static int ov2640_cam_init_isr(void)
   /* DMA */
 
   regval = DMA_IN_SUC_EOF_CH0_INT_ENA_M;
-  // regval = DMA_IN_DONE_CH0_INT_ENA_M;
-  // regval = DMA_IN_SUC_EOF_CH0_INT_ENA_M | DMA_IN_DONE_CH0_INT_ENA_M;
   putreg32(regval, DMA_IN_INT_ENA_CH0_REG);
 
   /* VSYNC */
 
-  // regval = LCD_CAM_CAM_VSYNC_INT_ENA_M | LCD_CAM_CAM_HS_INT_ENA_M;
   regval = LCD_CAM_CAM_VSYNC_INT_ENA_M;
   putreg32(regval, LCD_CAM_LC_DMA_INT_ENA_REG);
 
@@ -422,10 +417,10 @@ static int ov2640_dma_init(void) {
   //                   false);
 
   esp32s3_dma_setup2(dma_descriptors,
-                    ESP32S3_CAM_FB_SIZE/(ESP32S3_DMA_DATALEN_MAX+1),
+                    ESP32S3_CAM_FB_SIZE/(ESP32S3_DMA_DATALEN_MAX),
                     framebuffer,
                     ESP32S3_CAM_FB_SIZE,
-                    false, ESP32S3_DMA_DATALEN_MAX+1);
+                    false, ESP32S3_DMA_DATALEN_MAX);
 
   return 0;
 }
