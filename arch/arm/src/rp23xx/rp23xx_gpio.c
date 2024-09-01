@@ -33,8 +33,30 @@
 #include <arch/board/board.h>
 
 #include "arm_internal.h"
-#include "chip.h"
+#include "hardware/address_mapped.h"
+#include "hardware/structs/io_bank0.h"
+#include "hardware/structs/pads_bank0.h"
+
 #include "rp23xx_gpio.h"
+
+/****************************************************************************
+ * Preprocessor Definitions
+ ****************************************************************************/
+
+enum gpio_slew_rate {
+    GPIO_SLEW_RATE_SLOW = 0,  ///< Slew rate limiting enabled
+    GPIO_SLEW_RATE_FAST = 1   ///< Slew rate limiting disabled
+};
+
+enum gpio_drive_strength {
+    GPIO_DRIVE_STRENGTH_2MA = 0, ///< 2 mA nominal drive strength
+    GPIO_DRIVE_STRENGTH_4MA = 1, ///< 4 mA nominal drive strength
+    GPIO_DRIVE_STRENGTH_8MA = 2, ///< 8 mA nominal drive strength
+    GPIO_DRIVE_STRENGTH_12MA = 3 ///< 12 mA nominal drive strength
+};
+
+#define GPIO_OUT 1
+#define GPIO_IN 0
 
 /****************************************************************************
  * Private Data
@@ -56,25 +78,61 @@ static int g_gpio_function[RP23XX_GPIO_NUM];
 
 /* GPIO pins function mapping table */
 
-static const int g_gpio_function_mapping_spi[2][5] =
+static const int g_gpio_function_mapping_spi[2][7] =
 {
-  {  0,  4, 16, 20, -1 },     /* pin numbers assignable to SPI0 */
-  {  8, 12, 24, 28, -1 },     /* pin numbers assignable to SPI1 */
+  {
+    0,  4, 16, 20,
+#if 1
+    32, 36,
+#endif
+    -1
+  },     /* pin numbers assignable to SPI0 */
+  {
+    8, 12, 24, 28,
+#if 1
+    40, 44
+#endif
+    -1
+  },     /* pin numbers assignable to SPI1 */
 };
 
-static const int g_gpio_function_mapping_uart[2][5] =
+static const int g_gpio_function_mapping_uart[2][7] =
 {
-  {  0, 12, 16, 28, -1 },     /* pin numbers assignable to UART0 */
-  {  4,  8, 20, 24, -1 },     /* pin numbers assignable to UART1 */
+  {
+    0, 12, 16, 28,
+#if !PICO_RP2350A
+    32, 44,
+#endif
+    -1
+  },     /* pin numbers assignable to UART0 */
+  {
+    4,  8, 20, 24,
+    -1,
+#if !PICO_RP2350A
+    36, 40,
+#endif
+  },     /* pin numbers assignable to UART1 */
 };
 
-static const int g_gpio_function_mapping_i2c[2][9] =
+static const int g_gpio_function_mapping_i2c[2][13] =
 {
-  {  0,  4,  8, 12, 16, 20, 24, 28, -1 }, /* pin numbers assignable to I2C0 */
-  {  2,  6, 10, 14, 18, 22, 26, -1, -1 }, /* pin numbers assignable to I2C1 */
+  {
+    0,  4,  8, 12, 16, 20, 24, 28,
+#if !PICO_RP2350A
+32, 36, 40, 44,
+#endif
+    -1
+  }, /* pin numbers assignable to I2C0 */
+  {
+    2,  6, 10, 14, 18, 22, 26,
+#if !PICO_RP2350A
+  30, 34, 38, 42
+#endif
+    -1
+  }, /* pin numbers assignable to I2C1 */
 };
 
-static const int g_gpio_function_mapping_pwm[8][3] =
+static const int g_gpio_function_mapping_pwm[12][3] =
 {
   {  0, 16, -1 },             /* pin numbers assignable to PWM0 */
   {  2, 18, -1 },             /* pin numbers assignable to PWM1 */
@@ -83,7 +141,19 @@ static const int g_gpio_function_mapping_pwm[8][3] =
   {  8, 24, -1 },             /* pin numbers assignable to PWM4 */
   { 10, 26, -1 },             /* pin numbers assignable to PWM5 */
   { 12, 28, -1 },             /* pin numbers assignable to PWM6 */
-  { 14, -1, -1 },             /* pin numbers assignable to PWM7 */
+  {
+    14,
+#if !PICO_RP2350A
+    30,
+#endif
+    -1
+  },                                         /* pin numbers assignable to PWM7 */
+#if !PICO_RP2350A
+  { 32, 40, -1},             /* pin numbers assignable to PWM8 */
+  { 34, 42, -1},             /* pin numbers assignable to PWM9 */
+  { 36, 44, -1},            /* pin numbers assignable to PWM10 */
+  { 38, 46, -1},            /* pin numbers assignable to PWM11 */
+#endif
 };
 
 /****************************************************************************
@@ -108,17 +178,17 @@ static int rp23xx_gpio_interrupt(int irq, void *context, void *arg)
 
   /* Scan all GPIO interrupt status registers */
 
-  for (i = 0; i < 4; i++)
+  for (i = 0; i < 6; i++)
     {
       /* Get and clear pending GPIO interrupt status */
 
-      stat = getreg32(RP23XX_IO_BANK0_PROC_INTS(i * 8, 0));
+      stat = io_bank0_hw->proc0_irq_ctrl.ints[i];
       if (i == 3)
         {
           stat &= 0x00ffffff;     /* Clear reserved bits */
         }
-
-      putreg32(stat, RP23XX_IO_BANK0_INTR(i * 8));
+      
+      io_bank0_hw->intr[i] = stat;
 
       while (stat != 0)
         {
@@ -152,7 +222,7 @@ static int rp23xx_gpio_interrupt(int irq, void *context, void *arg)
  ****************************************************************************/
 
 /****************************************************************************
- * Name: r2040_gpio_get_function_pin
+ * Name: rp23xx_gpio_get_function_pin
  *
  * Description:
  *   Get the GPIO pin number to which the specified function is assigned
@@ -168,7 +238,7 @@ int rp23xx_gpio_get_function_pin(uint32_t func, uint32_t port)
 
   switch (func)
     {
-      case RP23XX_GPIO_FUNC_SPI:
+      case GPIO_FUNC_SPI:
         if (port >= 2)
           {
             return -1;
@@ -177,7 +247,7 @@ int rp23xx_gpio_get_function_pin(uint32_t func, uint32_t port)
         mapping = g_gpio_function_mapping_spi[port];
         break;
 
-      case RP23XX_GPIO_FUNC_UART:
+      case GPIO_FUNC_UART:
         if (port >= 2)
           {
             return -1;
@@ -186,7 +256,7 @@ int rp23xx_gpio_get_function_pin(uint32_t func, uint32_t port)
         mapping = g_gpio_function_mapping_uart[port];
         break;
 
-      case RP23XX_GPIO_FUNC_I2C:
+      case GPIO_FUNC_I2C:
         if (port >= 2)
           {
             return -1;
@@ -195,7 +265,7 @@ int rp23xx_gpio_get_function_pin(uint32_t func, uint32_t port)
         mapping = g_gpio_function_mapping_i2c[port];
         break;
 
-      case RP23XX_GPIO_FUNC_PWM:
+      case GPIO_FUNC_PWM:
         if (port >= 8)
           {
             return -1;
@@ -222,7 +292,7 @@ int rp23xx_gpio_get_function_pin(uint32_t func, uint32_t port)
 }
 
 /****************************************************************************
- * Name: r2040_gpio_set_function
+ * Name: rp23xx_gpio_set_function
  *
  * Description:
  *   Assign functions to the specified GPIO pin
@@ -233,20 +303,19 @@ void rp23xx_gpio_set_function(uint32_t gpio, uint32_t func)
 {
   DEBUGASSERT(gpio < RP23XX_GPIO_NUM);
 
-  modbits_reg32(RP23XX_PADS_BANK0_GPIO_IE,
-                RP23XX_PADS_BANK0_GPIO_ISO |
-                RP23XX_PADS_BANK0_GPIO_OD |
-                RP23XX_PADS_BANK0_GPIO_IE,
-                RP23XX_PADS_BANK0_GPIO(gpio));
+  hw_write_masked(&pads_bank0_hw->io[gpio],
+                  PADS_BANK0_GPIO0_IE_BITS,
+                  PADS_BANK0_GPIO0_ISO_BITS |
+                  PADS_BANK0_GPIO0_OD_BITS |
+                  PADS_BANK0_GPIO0_IE_BITS);
 
-  putreg32(func & RP23XX_IO_BANK0_GPIO_CTRL_FUNCSEL_MASK,
-           RP23XX_IO_BANK0_GPIO_CTRL(gpio));
+  io_bank0_hw->io[gpio].ctrl = func & IO_BANK0_GPIO0_CTRL_FUNCSEL_BITS;
 
   g_gpio_function[gpio] = func;
 }
 
 /****************************************************************************
- * Name: r2040_gpio_set_pulls
+ * Name: rp23xx_gpio_set_pulls
  *
  * Description:
  *   Set pull-up or pull-down to the specified GPIO pin
@@ -257,14 +326,14 @@ void rp23xx_gpio_set_pulls(uint32_t gpio, int up, int down)
 {
   DEBUGASSERT(gpio < RP23XX_GPIO_NUM);
 
-  modbits_reg32((up   ? RP23XX_PADS_BANK0_GPIO_PUE : 0) |
-                (down ? RP23XX_PADS_BANK0_GPIO_PDE : 0),
-                RP23XX_PADS_BANK0_GPIO_PUE | RP23XX_PADS_BANK0_GPIO_PDE,
-                RP23XX_PADS_BANK0_GPIO(gpio));
+  hw_write_masked(&pads_bank0_hw->io[gpio],
+                  (up   ? PADS_BANK0_GPIO0_PUE_BITS : 0) |
+                  (down ? PADS_BANK0_GPIO0_PDE_BITS : 0),
+                  PADS_BANK0_GPIO0_PUE_BITS | PADS_BANK0_GPIO0_PDE_BITS);
 }
 
 /****************************************************************************
- * Name: r2040_gpio_init
+ * Name: rp23xx_gpio_init
  *
  * Description:
  *   Initialize software-controlled GPIO function
@@ -277,11 +346,11 @@ void rp23xx_gpio_init(uint32_t gpio)
 
   rp23xx_gpio_setdir(gpio, false);
   rp23xx_gpio_put(gpio, false);
-  rp23xx_gpio_set_function(gpio, RP23XX_GPIO_FUNC_SIO);
+  rp23xx_gpio_set_function(gpio, GPIO_FUNC_SIO);
 }
 
 /****************************************************************************
- * Name: r2040_gpio_irq_attach
+ * Name: rp23xx_gpio_irq_attach
  *
  * Description:
  *   Configure the interrupt generated by the specified GPIO pin.
@@ -311,7 +380,7 @@ int rp23xx_gpio_irq_attach(uint32_t gpio, uint32_t intrmode,
 
   /* Clear pending interrupts */
 
-  setbits_reg32(0xf << ((gpio % 8) * 4), RP23XX_IO_BANK0_INTR(gpio));
+  hw_set_bits(&io_bank0_hw->intr[gpio], 0xf << ((gpio % 8) * 4));
 
   return OK;
 }
@@ -326,7 +395,7 @@ int rp23xx_gpio_irq_attach(uint32_t gpio, uint32_t intrmode,
 
 void rp23xx_gpio_enable_irq(uint32_t gpio)
 {
-  uint32_t reg;
+  volatile uint32_t *reg;
 
   DEBUGASSERT(gpio < RP23XX_GPIO_NUM);
 
@@ -334,9 +403,9 @@ void rp23xx_gpio_enable_irq(uint32_t gpio)
     {
       /* Set interrupt enable bit */
 
-      reg = RP23XX_IO_BANK0_PROC_INTE(gpio, 0);
-      clrbits_reg32(0xf << ((gpio % 8) * 4), reg);
-      setbits_reg32(0x1 << ((gpio % 8) * 4 + g_gpio_irq_modes[gpio]), reg);
+      reg = &io_bank0_hw->proc0_irq_ctrl.inte[gpio>>3];
+      hw_clear_bits(reg, 0xf << ((gpio % 8) * 4));
+      hw_set_bits(reg, 0x1 << ((gpio % 8) * 4 + g_gpio_irq_modes[gpio]));
     }
 }
 
@@ -350,7 +419,7 @@ void rp23xx_gpio_enable_irq(uint32_t gpio)
 
 void rp23xx_gpio_disable_irq(uint32_t gpio)
 {
-  uint32_t reg;
+  volatile uint32_t *reg;
 
   DEBUGASSERT(gpio < RP23XX_GPIO_NUM);
 
@@ -358,8 +427,8 @@ void rp23xx_gpio_disable_irq(uint32_t gpio)
     {
       /* Clear interrupt enable bit */
 
-      reg = RP23XX_IO_BANK0_PROC_INTE(gpio, 0);
-      clrbits_reg32(0xf << ((gpio % 8) * 4), reg);
+      reg = &io_bank0_hw->proc0_irq_ctrl.inte[gpio];
+      hw_clear_bits(reg, 0xf << ((gpio % 8) * 4));
     }
 }
 
@@ -375,21 +444,21 @@ void rp23xx_gpio_clear_interrupt(uint32_t gpio,
                                  bool     edge_low,
                                  bool     edge_high)
 {
-  uint32_t reg;
+  volatile uint32_t *reg;
   uint32_t bits = 0;
 
   DEBUGASSERT(gpio < RP23XX_GPIO_NUM);
 
-  reg = RP23XX_IO_BANK0_INTR(gpio);
+  reg = &io_bank0_hw->intr[gpio>>3];
 
   if (edge_low)  bits |= 0x04 << (gpio % 8);
   if (edge_high) bits |= 0x08 << (gpio % 8);
 
-  clrbits_reg32(bits, reg);
+  hw_clear_bits(reg, bits);
 }
 
 /****************************************************************************
- * Name: r2040_gpio_initialize
+ * Name: rp23xx_gpio_initialize
  *
  * Description:
  *   Initialize GPIO function management
@@ -402,6 +471,6 @@ void rp23xx_gpio_initialize(void)
 
   for (i = 0; i < RP23XX_GPIO_NUM; i++)
     {
-      g_gpio_function[i] = RP23XX_GPIO_FUNC_NULL;
+      g_gpio_function[i] = GPIO_FUNC_NULL;
     }
 }

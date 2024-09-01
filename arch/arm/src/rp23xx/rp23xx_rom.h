@@ -22,42 +22,105 @@
  * Included Files
  ****************************************************************************/
 
+#include <stdint.h>
 #include <nuttx/config.h>
 
 /****************************************************************************
  * Pre-processor Definitions
  ****************************************************************************/
 
-#define ROM_HWORD_AS_PTR(a) ((void *)(uintptr_t) (*(uint16_t *)(uintptr_t)a))
+// ROM FUNCTIONS
 
-#define ROM_CODE(a,b) ((b << 8) | a)
+// RP2040 & RP2350
+#define ROM_DATA_SOFTWARE_GIT_REVISION          ROM_TABLE_CODE('G', 'R')
+#define ROM_FUNC_FLASH_ENTER_CMD_XIP            ROM_TABLE_CODE('C', 'X')
+#define ROM_FUNC_FLASH_EXIT_XIP                 ROM_TABLE_CODE('E', 'X')
+#define ROM_FUNC_FLASH_FLUSH_CACHE              ROM_TABLE_CODE('F', 'C')
+#define ROM_FUNC_CONNECT_INTERNAL_FLASH         ROM_TABLE_CODE('I', 'F')
+#define ROM_FUNC_FLASH_RANGE_ERASE              ROM_TABLE_CODE('R', 'E')
+#define ROM_FUNC_FLASH_RANGE_PROGRAM            ROM_TABLE_CODE('R', 'P')
 
-#define ROM_POPCOUNT32             ROM_CODE('P', '3')
-#define ROM_REVERSE32              ROM_CODE('R', '3')
-#define ROM_CLZ32                  ROM_CODE('L', '3')
-#define ROM_CTZ32                  ROM_CODE('T', '3')
-#define ROM_MEMSET                 ROM_CODE('M', 'S')
-#define ROM_MEMSET4                ROM_CODE('S', '4')
-#define ROM_MEMCPY                 ROM_CODE('M', 'C')
-#define ROM_MEMCPY44               ROM_CODE('C', '4')
-#define ROM_RESET_USB_BOOT         ROM_CODE('U', 'B')
-#define ROM_FLASH_CONNECT          ROM_CODE('I', 'F')
-#define ROM_FLASH_EXIT_XIP         ROM_CODE('E', 'X')
-#define ROM_FLASH_ERASE            ROM_CODE('R', 'E')
-#define ROM_FLASH_PROGRAM          ROM_CODE('R', 'P')
-#define ROM_FLASH_FLUSH_CACHE      ROM_CODE('F', 'C')
-#define ROM_FLASH_ENABLE_XIP       ROM_CODE('C', 'X')
+// RP2350 only
+#define ROM_FUNC_PICK_AB_PARTITION              ROM_TABLE_CODE('A', 'B')
+#define ROM_FUNC_CHAIN_IMAGE                    ROM_TABLE_CODE('C', 'I')
+#define ROM_FUNC_EXPLICIT_BUY                   ROM_TABLE_CODE('E', 'B')
+#define ROM_FUNC_FLASH_RUNTIME_TO_STORAGE_ADDR  ROM_TABLE_CODE('F', 'A')
+#define ROM_DATA_FLASH_DEVINFO16_PTR            ROM_TABLE_CODE('F', 'D')
+#define ROM_FUNC_FLASH_OP                       ROM_TABLE_CODE('F', 'O')
+#define ROM_FUNC_GET_B_PARTITION                ROM_TABLE_CODE('G', 'B')
+#define ROM_FUNC_GET_PARTITION_TABLE_INFO       ROM_TABLE_CODE('G', 'P')
+#define ROM_FUNC_GET_SYS_INFO                   ROM_TABLE_CODE('G', 'S')
+#define ROM_FUNC_GET_UF2_TARGET_PARTITION       ROM_TABLE_CODE('G', 'U')
+#define ROM_FUNC_LOAD_PARTITION_TABLE           ROM_TABLE_CODE('L', 'P')
+#define ROM_FUNC_OTP_ACCESS                     ROM_TABLE_CODE('O', 'A')
+#define ROM_DATA_PARTITION_TABLE_PTR            ROM_TABLE_CODE('P', 'T')
+#define ROM_FUNC_FLASH_RESET_ADDRESS_TRANS      ROM_TABLE_CODE('R', 'A')
+#define ROM_FUNC_REBOOT                         ROM_TABLE_CODE('R', 'B')
+#define ROM_FUNC_SET_ROM_CALLBACK               ROM_TABLE_CODE('R', 'C')
+#define ROM_FUNC_SECURE_CALL                    ROM_TABLE_CODE('S', 'C')
+#define ROM_FUNC_SET_NS_API_PERMISSION          ROM_TABLE_CODE('S', 'P')
+#define ROM_FUNC_BOOTROM_STATE_RESET            ROM_TABLE_CODE('S', 'R')
+#define ROM_FUNC_SET_BOOTROM_STACK              ROM_TABLE_CODE('S', 'S')
+#define ROM_DATA_SAVED_XIP_SETUP_FUNC_PTR       ROM_TABLE_CODE('X', 'F')
+#define ROM_FUNC_FLASH_SELECT_XIP_READ_MODE     ROM_TABLE_CODE('X', 'M')
+#define ROM_FUNC_VALIDATE_NS_BUFFER             ROM_TABLE_CODE('V', 'B')
 
-#define ROM_LOOKUP(x) \
-          ((rom_table_lookup_fn)ROM_HWORD_AS_PTR(0x18)) \
-          (ROM_HWORD_AS_PTR(0x14),x)
+// these form a bit set
+#define BOOTROM_STATE_RESET_CURRENT_CORE 0x01
+#define BOOTROM_STATE_RESET_OTHER_CORE   0x02
+#define BOOTROM_STATE_RESET_GLOBAL_STATE 0x04 // reset any global state (e.g. permissions)
 
-#define STR(s)           #s
-#define RAM_CODE_ATTR(f) __attribute__((noinline, section(".ram_code." f)))
-#define RAM_CODE(f)      RAM_CODE_ATTR(STR(f)) f
+#define RT_FLAG_FUNC_RISCV      0x0001
+#define RT_FLAG_FUNC_RISCV_FAR  0x0003
+#define RT_FLAG_FUNC_ARM_SEC    0x0004
+// reserved for 32-bit pointer: 0x0008
+#define RT_FLAG_FUNC_ARM_NONSEC 0x0010
+
+#define BOOTROM_FUNC_TABLE_OFFSET 0x14
+
+#define BOOTROM_IS_A2() ((*(volatile uint8_t *)0x13) == 2)
+#define BOOTROM_WELL_KNOWN_PTR_SIZE (BOOTROM_IS_A2() ? 2 : 4)
+
+#if defined(__riscv)
+#define BOOTROM_ENTRY_OFFSET            0x7dfc
+#define BOOTROM_TABLE_LOOKUP_ENTRY_OFFSET (BOOTROM_ENTRY_OFFSET - BOOTROM_WELL_KNOWN_PTR_SIZE)
+#define BOOTROM_TABLE_LOOKUP_OFFSET     (BOOTROM_ENTRY_OFFSET - BOOTROM_WELL_KNOWN_PTR_SIZE*2)
+#else
+#define BOOTROM_VTABLE_OFFSET 0x00
+#define BOOTROM_TABLE_LOOKUP_OFFSET     (BOOTROM_FUNC_TABLE_OFFSET + BOOTROM_WELL_KNOWN_PTR_SIZE)
+#endif
+
+/*! \brief Return a bootrom lookup code based on two ASCII characters
+ * \ingroup pico_bootrom
+ *
+ * These codes are uses to lookup data or function addresses in the bootrom
+ *
+ * \param c1 the first character
+ * \param c2 the second character
+ * \return the 'code' to use in rom_func_lookup() or rom_data_lookup()
+ */
+#define ROM_TABLE_CODE(c1, c2) ((c1) | ((c2) << 8))
 
 /****************************************************************************
  * Public Type Definitions
  ****************************************************************************/
 
-typedef void *(*rom_table_lookup_fn)(uint16_t *table, uint32_t code);
+typedef void *(*rom_table_lookup_fn)(uint32_t code, uint32_t mask);
+
+static __inline void *rom_func_lookup(uint32_t code) {
+#ifdef __riscv
+    uint32_t rom_offset_adjust = rom_size_is_64k() ? 32 * 1024 : 0;
+    // on RISC-V the code (a jmp) is actually embedded in the table
+    rom_table_lookup_fn rom_table_lookup = (rom_table_lookup_fn) (uintptr_t)*(uint16_t*)(BOOTROM_TABLE_LOOKUP_ENTRY_OFFSET + rom_offset_adjust);
+    return rom_table_lookup(code, RT_FLAG_FUNC_RISCV);
+#else
+    // on ARM the function pointer is stored in the table, so we dereference it
+    // via lookup() rather than lookup_entry()
+    rom_table_lookup_fn rom_table_lookup = (rom_table_lookup_fn) (uintptr_t)*(uint16_t*)(BOOTROM_TABLE_LOOKUP_OFFSET);
+    // if (pico_processor_state_is_nonsecure()) {
+        return rom_table_lookup(code, RT_FLAG_FUNC_ARM_NONSEC);
+    // } else {
+    //     return rom_table_lookup(code, RT_FLAG_FUNC_ARM_SEC);
+    // }
+#endif
+}

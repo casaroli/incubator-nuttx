@@ -35,21 +35,21 @@
 
 #include <arch/rp23xx/chip.h>
 
-/* Define the number of interrupt vectors that need to be supported for
- * this chip
- */
+// /* Define the number of interrupt vectors that need to be supported for
+//  * this chip
+//  */
 
-#define ARMV6M_PERIPHERAL_INTERRUPTS 32
+// #define ARMV6M_PERIPHERAL_INTERRUPTS 32
 
-/* Include the memory map file.  Other chip hardware files should then
- * include this file for the proper setup.
- */
+// /* Include the memory map file.  Other chip hardware files should then
+//  * include this file for the proper setup.
+//  */
 
-#include "hardware/rp23xx_memorymap.h"
+// #include "hardware/rp23xx_memorymap.h"
 
-#if defined(CONFIG_SMP) && CONFIG_ARCH_INTERRUPTSTACK > 3
-#  include "hardware/rp23xx_sio.h"
-#endif
+// #if defined(CONFIG_SMP) && CONFIG_ARCH_INTERRUPTSTACK > 3
+// #  include "hardware/rp23xx_sio.h"
+// #endif
 
 /****************************************************************************
  * Macro Definitions

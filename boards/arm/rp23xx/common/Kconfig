@@ -7,27 +7,28 @@
 #  Build Configuration
 #####################################################################
 
-config RP23XX_FLASH_BOOT
-	bool "flash boot"
-	default y
-	---help---
-		If y, the built binary can be used for flash boot.
-		If not, the binary is for SRAM boot.
-
-config RP23XX_FLASH_CHIP
-	string "Second stage boot loader"
-	default "w25q080"
-	---help---
-		This is the name of the Pico-SDK second stage boot loader
-		to use for this board.  This board using a Q16 flash chip
-		which is compatible with the w25q080 boot loader.
-		Basically this option should not be changed.
-
 config RP23XX_UF2_BINARY
 	bool "uf2 binary format"
 	default y
 	---help---
 		Create nuttx.uf2 binary format used on RP23XX based arch.
+
+#####################################################################
+#  PSRAM Configuration
+#####################################################################
+
+if RP23XX_PSRAM
+
+config RP23XX_PSRAM_CS1_GPIO
+	int "GPIO pin for the PSRAM (0, 8, 19, or 47)"
+	default 47
+	range 0 47
+	---help---
+		The PSRAM shares the same QPI signals with the flash, but
+		with a separate CS pin. Refer to board datasheet for more
+		information
+
+endif
 
 #####################################################################
 #  UART Configuration
@@ -534,7 +535,7 @@ if RP23XX_FLASH_FILE_SYSTEM
 
 config RP23XX_FLASH_LENGTH
 	int "Size of flash memory in bytes."
-	default 2097152
+	default 4194304
 	---help---
 		This is the overall amount of flash memory on the board.
 

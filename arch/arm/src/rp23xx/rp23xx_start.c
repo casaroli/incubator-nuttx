@@ -35,7 +35,7 @@
 #include "rp23xx_config.h"
 #include "rp23xx_clock.h"
 #include "rp23xx_uart.h"
-#include "hardware/rp23xx_sio.h"
+#include "hardware/structs/sio.h"
 
 /****************************************************************************
  * Pre-processor Definitions
@@ -91,7 +91,7 @@ const uint32_t boot_shit[] =
 
 void __start(void)
 {
-#ifdef CONFIG_RP23XX_FLASH_BOOT
+#ifdef CONFIG_BOOT_RUNFROMFLASH
   const uint32_t *src;
 #endif
   uint32_t *dest;
@@ -118,30 +118,20 @@ void __start(void)
       *dest++ = 0;
     }
 
-  /* Set up clock */
-
-  rp23xx_clockconfig();
-  rp23xx_boardearlyinitialize();
-
   /* Initialize all spinlock states */
 
   for (i = 0; i < 32; i++)
     {
-      putreg32(0, RP23XX_SIO_SPINLOCK(i));
+      sio_hw->spinlock[i] = 0;
     }
 
-  /* Configure the uart so that we can get debug output as soon as possible */
-
-  rp23xx_lowsetup();
-  showprogress('A');
-
-  /* Move the initialized data section from his temporary holding spot in
+  /* Move the initialized data section from its temporary holding spot in
    * FLASH into the correct place in SRAM.  The correct place in SRAM is
    * give by _sdata and _edata.  The temporary location is in FLASH at the
    * end of all of the other read-only data (.text, .rodata) at _eronly.
    */
 
-#ifdef CONFIG_RP23XX_FLASH_BOOT
+#ifdef CONFIG_BOOT_RUNFROMFLASH
   for (src = (const uint32_t *)_eronly,
        dest = (uint32_t *)_sdata; dest < (uint32_t *)_edata;
       )
@@ -149,6 +139,16 @@ void __start(void)
       *dest++ = *src++;
     }
 #endif
+
+  /* Set up clock */
+
+  rp23xx_clockconfig();
+  rp23xx_boardearlyinitialize();
+
+  /* Configure the uart so that we can get debug output as soon as possible */
+
+  rp23xx_lowsetup();
+  showprogress('A');
 
   showprogress('B');
 

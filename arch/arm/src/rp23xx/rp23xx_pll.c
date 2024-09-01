@@ -49,11 +49,10 @@
 
 #include <arch/board/board.h>
 
-#include "arm_internal.h"
-#include "chip.h"
-
 #include "rp23xx_pll.h"
-#include "hardware/rp23xx_pll.h"
+
+#include "hardware/address_mapped.h"
+#include "hardware/structs/pll.h"
 
 /****************************************************************************
  * Private Functions
@@ -71,16 +70,16 @@
  *
  ****************************************************************************/
 
-void rp23xx_pll_init(uint32_t base, uint32_t refdiv, uint32_t vco_freq,
+void rp23xx_pll_init(pll_hw_t *base, uint32_t refdiv, uint32_t vco_freq,
                      uint32_t post_div1, uint8_t post_div2)
 {
   /* Turn off PLL in case it is already running */
 
-  putreg32(0xffffffff, base + RP23XX_PLL_PWR_OFFSET);
-  putreg32(0, base + RP23XX_PLL_FBDIV_INT_OFFSET);
+  base->pwr = 0xffffffff;
+  base->fbdiv_int = 0;
 
   uint32_t ref_mhz = BOARD_XOSC_FREQ / refdiv;
-  putreg32(refdiv, base + RP23XX_PLL_CS_OFFSET);
+  base->cs = refdiv;
 
   /* What are we multiplying the reference clock by to get the vco freq
    * (The regs are called div, because you divide the vco output and compare
@@ -99,25 +98,24 @@ void rp23xx_pll_init(uint32_t base, uint32_t refdiv, uint32_t vco_freq,
 
   /* Put calculated value into feedback divider */
 
-  putreg32(fbdiv, base + RP23XX_PLL_FBDIV_INT_OFFSET);
+  base->fbdiv_int = fbdiv;
 
   /* Turn on PLL */
 
-  clrbits_reg32(RP23XX_PLL_PWR_PD | RP23XX_PLL_PWR_VCOPD,
-                base + RP23XX_PLL_PWR_OFFSET);
+  hw_clear_bits(&base->pwr, PLL_PWR_PD_BITS | PLL_PWR_VCOPD_BITS);
 
   /* Wait for PLL to lock */
 
-  while (!(getreg32(base + RP23XX_PLL_CS_OFFSET) & RP23XX_PLL_CS_LOCK))
+  while (!(base->cs & PLL_CS_LOCK_BITS))
     ;
 
   /* Set up post dividers */
 
-  putreg32((post_div1 << RP23XX_PLL_PRIM_POSTDIV1_SHIFT) |
-           (post_div2 << RP23XX_PLL_PRIM_POSTDIV2_SHIFT),
-           base + RP23XX_PLL_PRIM_OFFSET);
+  base->prim = 
+           (post_div1 << PLL_PRIM_POSTDIV1_LSB) |
+           (post_div2 << PLL_PRIM_POSTDIV2_LSB);
 
   /* Turn on post divider */
 
-  clrbits_reg32(RP23XX_PLL_PWR_POSTDIVPD, base + RP23XX_PLL_PWR_OFFSET);
+  hw_clear_bits(&base->pwr, PLL_PWR_POSTDIVPD_BITS);
 }

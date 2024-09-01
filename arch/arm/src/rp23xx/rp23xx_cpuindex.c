@@ -27,7 +27,7 @@
 #include <nuttx/arch.h>
 
 #include "arm_internal.h"
-#include "hardware/rp23xx_sio.h"
+#include "hardware/structs/sio.h"
 
 #ifdef CONFIG_SMP
 
@@ -53,7 +53,7 @@
 
 int up_cpu_index(void)
 {
-  return getreg32(RP23XX_SIO_CPUID);
+  return getreg32(&sio_hw->cpuid);
 }
 
 #endif /* CONFIG_SMP */

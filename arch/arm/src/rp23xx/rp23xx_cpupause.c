@@ -34,9 +34,10 @@
 #include <nuttx/spinlock.h>
 #include <nuttx/sched_note.h>
 
+#include "hardware/regs/sio.h"
 #include "sched/sched.h"
 #include "arm_internal.h"
-#include "hardware/rp23xx_sio.h"
+#include "hardware/structs/sio.h"
 
 #ifdef CONFIG_SMP
 
@@ -44,8 +45,8 @@
  * Pre-processor Definitions
  ****************************************************************************/
 
-#if 0
-#define DPRINTF(fmt, args...) llinfo(fmt, ##args)
+#if 1
+#define DPRINTF(fmt, args...) sinfo(fmt, ##args)
 #else
 #define DPRINTF(fmt, args...) do {} while (0)
 #endif
@@ -280,22 +281,22 @@ int arm_pause_handler(int irq, void *c, void *arg)
   int irqreq;
   uint32_t stat;
 
-  stat = getreg32(RP23XX_SIO_FIFO_ST);
-  if (stat & (RP23XX_SIO_FIFO_ST_ROE | RP23XX_SIO_FIFO_ST_WOF))
+  stat = getreg32(&sio_hw->fifo_st);
+  if (stat & (SIO_FIFO_ST_ROE_BITS | SIO_FIFO_ST_WOF_BITS))
     {
       /* Clear sticky flag */
 
-      putreg32(0, RP23XX_SIO_FIFO_ST);
+      putreg32(0, &sio_hw->fifo_st);
     }
 
-  if (!(stat & RP23XX_SIO_FIFO_ST_VLD))
+  if (!(stat & SIO_FIFO_ST_VLD_BITS))
     {
       /* No data received */
 
       return OK;
     }
 
-  irqreq = getreg32(RP23XX_SIO_FIFO_RD);
+  irqreq = getreg32(&sio_hw->fifo_rd);
 
   if (irqreq != 0)
     {
@@ -383,9 +384,9 @@ int up_cpu_pause(int cpu)
 
   /* Generate IRQ for CPU(cpu) */
 
-  while (!(getreg32(RP23XX_SIO_FIFO_ST) & RP23XX_SIO_FIFO_ST_RDY))
+  while (!(getreg32(&sio_hw->fifo_st) & SIO_FIFO_ST_RDY_BITS))
     ;
-  putreg32(0, RP23XX_SIO_FIFO_WR);
+  putreg32(0, &sio_hw->fifo_wr);
 
   /* Wait for the other CPU to unlock g_cpu_paused meaning that
    * it is fully paused and ready for up_cpu_resume();
@@ -475,9 +476,9 @@ void rp23xx_send_irqreq(int irqreq)
 
   /* Send IRQ number to Core #0 */
 
-  while (!(getreg32(RP23XX_SIO_FIFO_ST) & RP23XX_SIO_FIFO_ST_RDY))
+  while (!(getreg32(&sio_hw->fifo_st) & SIO_FIFO_ST_RDY_BITS))
     ;
-  putreg32(irqreq, RP23XX_SIO_FIFO_WR);
+  putreg32(irqreq, &sio_hw->fifo_wr);
 
   /* Wait for the handler is executed on cpu */
 

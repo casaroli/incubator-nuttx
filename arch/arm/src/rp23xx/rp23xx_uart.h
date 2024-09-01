@@ -27,7 +27,8 @@
 
 #include <nuttx/config.h>
 #include "chip.h"
-#include "hardware/rp23xx_uart01.h"
+#include "hardware/structs/uart.h"
+#include "hardware/regs/uart.h"
 
 /****************************************************************************
  * Public Function Prototypes
@@ -45,7 +46,7 @@ extern "C"
 #endif
 
 void rp23xx_lowsetup(void);
-void rp23xx_setbaud(uintptr_t uartbase, uint32_t basefreq, uint32_t baud);
+void rp23xx_setbaud(uart_hw_t *uartbase, uint32_t basefreq, uint32_t baud);
 
 #undef EXTERN
 #if defined(__cplusplus)

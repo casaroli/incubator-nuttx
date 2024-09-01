@@ -20,7 +20,8 @@
 
 MEMORY
 {
-  flash (rx) : ORIGIN = 0x10000000, LENGTH = 2048K
+  flash (rx) : ORIGIN = 0x10000000, LENGTH = 16M
+/*  psram (rwx) : ORIGIN = 0x11000000, LENGTH = 8M */
   sram (rwx) : ORIGIN = 0x20000000, LENGTH = 520K
 }
 

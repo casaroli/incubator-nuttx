@@ -184,7 +184,7 @@ static int rp23xx_reserved(int irq, void *context, void *arg)
 static inline void rp23xx_clrpend(int irq)
 {
   /* This will be called on each interrupt exit whether the interrupt can be
-   * enambled or not.  So this assertion is necessarily lame.
+   * enabled or not.  So this assertion is necessarily lame.
    */
 
   DEBUGASSERT((unsigned)irq < NR_IRQS);
@@ -197,13 +197,13 @@ static inline void rp23xx_clrpend(int irq)
        * interrupt
        */
 
-      if (irq < 32)
+      if (irq - RP23XX_IRQ_EXTINT < 32)
         {
           putreg32((1 << (irq - RP23XX_IRQ_EXTINT)), NVIC_IRQ0_31_CLRPEND);
         }
       else
         {
-          putreg32((1 << (irq - 32 - RP23XX_IRQ_EXTINT)), NVIC_IRQ32_63_CLRPEND);
+          putreg32((1 << (irq - RP23XX_IRQ_EXTINT - 32)), NVIC_IRQ32_63_CLRPEND);
         }
     }
 }
@@ -297,7 +297,7 @@ void up_disable_irq(int irq)
   DEBUGASSERT((unsigned)irq < NR_IRQS);
 
 #ifdef CONFIG_SMP
-  if (irq >= RP23XX_IRQ_EXTINT && irq != RP23XX_SIO_IRQ_PROC1 &&
+  if (irq >= RP23XX_IRQ_EXTINT && irq != RP23XX_SIO_IRQ_FIFO &&
       up_cpu_index() != 0)
     {
       /* Must be handled by Core 0 */
@@ -309,7 +309,7 @@ void up_disable_irq(int irq)
 
   /* Check for an external interrupt */
 
-  if (irq >= RP23XX_IRQ_EXTINT && irq < RP23XX_IRQ_NIRQS)
+  if (irq - RP23XX_IRQ_EXTINT >= RP23XX_IRQ_EXTINT && irq < RP23XX_IRQ_NIRQS)
     {
       /* Set the appropriate bit in the ICER register to disable the
        * interrupt
@@ -321,7 +321,7 @@ void up_disable_irq(int irq)
         }
       else
         {
-          putreg32((1 << (irq - 32 - RP23XX_IRQ_EXTINT)), NVIC_IRQ32_63_CLEAR);
+          putreg32((1 << (irq - RP23XX_IRQ_EXTINT - 32)), NVIC_IRQ32_63_CLEAR);
         }
     }
 
@@ -352,7 +352,7 @@ void up_enable_irq(int irq)
   DEBUGASSERT((unsigned)irq < NR_IRQS);
 
 #ifdef CONFIG_SMP
-  if (irq >= RP23XX_IRQ_EXTINT && irq != RP23XX_SIO_IRQ_PROC1 &&
+  if (irq >= RP23XX_IRQ_EXTINT && irq != RP23XX_SIO_IRQ_FIFO &&
       up_cpu_index() != 0)
     {
       /* Must be handled by Core 0 */
@@ -370,13 +370,13 @@ void up_enable_irq(int irq)
        * interrupt
        */
 
-      if (irq < 32)
+      if (irq - RP23XX_IRQ_EXTINT < 32)
         {
           putreg32((1 << (irq - RP23XX_IRQ_EXTINT)), NVIC_IRQ0_31_ENABLE);
         }
       else
         {
-          putreg32((1 << (irq - 32 - RP23XX_IRQ_EXTINT)), NVIC_IRQ32_63_ENABLE);      
+          putreg32((1 << (irq - RP23XX_IRQ_EXTINT - 32)), NVIC_IRQ32_63_ENABLE);      
         }
     }
 

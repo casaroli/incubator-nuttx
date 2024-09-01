@@ -23,10 +23,12 @@ include $(TOPDIR)/tools/Config.mk
 #include $(TOPDIR)/tools/rp23xx/Config.mk
 include $(TOPDIR)/arch/arm/src/armv8-m/Toolchain.defs
 
-ifeq ($(CONFIG_RP23XX_FLASH_BOOT),y)
-  LDSCRIPT = raspberrypi-pico-2-flash.ld
+ifeq ($(CONFIG_BOOT_RUNFROMFLASH),y)
+  #LDSCRIPT = raspberrypi-pico-2-flash.ld
+  LDSCRIPT = memmap_default.ld
 else
-  LDSCRIPT = raspberrypi-pico-2-sram.ld
+  #LDSCRIPT = raspberrypi-pico-2-sram.ld
+  LDSCRIPT = memmap_no_flash.ld
 endif
 
 ARCHSCRIPT += $(BOARD_DIR)$(DELIM)scripts$(DELIM)$(LDSCRIPT)
@@ -40,6 +42,6 @@ CXXPICFLAGS = $(ARCHPICFLAGS) $(CXXFLAGS)
 CPPFLAGS := $(ARCHINCLUDES) $(ARCHDEFINES) $(EXTRAFLAGS)
 AFLAGS := $(CFLAGS) -D__ASSEMBLY__
 
-NXFLATLDFLAGS1 = -r -d -warn-common
-NXFLATLDFLAGS2 = $(NXFLATLDFLAGS1) -T$(TOPDIR)/binfmt/libnxflat/gnu-nxflat-pcrel.ld -no-check-sections
-LDNXFLATFLAGS = -e main -s 2048
+#NXFLATLDFLAGS1 = -r -d -warn-common
+#NXFLATLDFLAGS2 = $(NXFLATLDFLAGS1) -T$(TOPDIR)/binfmt/libnxflat/gnu-nxflat-pcrel.ld -no-check-sections
+#LDNXFLATFLAGS = -e main -s 2048

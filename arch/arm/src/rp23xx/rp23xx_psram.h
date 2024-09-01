@@ -1,5 +1,5 @@
 /****************************************************************************
- * arch/arm/src/rp23xx/rp23xx_testset.c
+ * arch/arm/src/rp23xx/rp23xx_psram.h
  *
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
@@ -18,67 +18,47 @@
  *
  ****************************************************************************/
 
+#ifndef __ARCH_ARM_SRC_RP23XX_RP23XX_PSRAM_H
+#define __ARCH_ARM_SRC_RP23XX_RP23XX_PSRAM_H
+
 /****************************************************************************
  * Included Files
  ****************************************************************************/
 
 #include <nuttx/config.h>
 
-#include <nuttx/arch.h>
-#include <nuttx/spinlock.h>
-
-#include "hardware/rp23xx_sio.h"
-#include "arm_internal.h"
-
 /****************************************************************************
  * Pre-processor Definitions
  ****************************************************************************/
 
-#define RP23XX_TESTSET_SPINLOCK     0   /* Spinlock used for test and set */
-
 /****************************************************************************
- * Public Functions
+ * Public Types
  ****************************************************************************/
 
 /****************************************************************************
- * Name: up_testset
- *
- * Description:
- *   Perform and atomic test and set operation on the provided spinlock.
- *   This function must be provided via the architecture-specific logic.
- *
- * Input Parameters:
- *   lock  - A reference to the spinlock object.
- *
- * Returned Value:
- *   The spinlock is always locked upon return.  The previous value of the
- *   spinlock variable is returned, either SP_LOCKED if the spinlock was
- *   previously locked (meaning that the test-and-set operation failed to
- *   obtain the lock) or SP_UNLOCKED if the spinlock was previously unlocked
- *   (meaning that we successfully obtained the lock).
- *
+ * Public Data
  ****************************************************************************/
 
-spinlock_t up_testset(volatile spinlock_t *lock)
+#ifndef __ASSEMBLY__
+
+#undef EXTERN
+#if defined(__cplusplus)
+#define EXTERN extern "C"
+extern "C"
 {
-  spinlock_t ret;
+#else
+#define EXTERN extern
+#endif
 
-  /* Lock hardware spinlock */
+/****************************************************************************
+ * Public Function Prototypes
+ ****************************************************************************/
 
-  while (getreg32(RP23XX_SIO_SPINLOCK(RP23XX_TESTSET_SPINLOCK)) == 0)
-    ;
+void rp23xx_psramconfig(void);
 
-  ret = *lock;
-
-  if (ret == SP_UNLOCKED)
-    {
-      *lock = SP_LOCKED;
-      SP_DMB();
-    }
-
-  /* Unlock hardware spinlock */
-
-  putreg32(0, RP23XX_SIO_SPINLOCK(RP23XX_TESTSET_SPINLOCK));
-
-  return ret;
+#undef EXTERN
+#if defined(__cplusplus)
 }
+#endif
+#endif /* __ASSEMBLY__ */
+#endif /* __ARCH_ARM_SRC_RP23XX_RP23XX_PSRAM_H */

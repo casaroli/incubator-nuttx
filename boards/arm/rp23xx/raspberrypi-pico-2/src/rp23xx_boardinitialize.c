@@ -31,6 +31,7 @@
 
 #include "arm_internal.h"
 #include "rp23xx_gpio.h"
+#include "rp23xx_psram.h"
 
 #ifdef CONFIG_ARCH_BOARD_COMMON
 #include "rp23xx_common_initialize.h"
@@ -81,6 +82,10 @@ void rp23xx_boardinitialize(void)
 {
   #ifdef CONFIG_ARCH_BOARD_COMMON
   rp23xx_common_initialize();
+  #endif
+
+  #ifdef CONFIG_RP23XX_PSRAM
+  rp23xx_psramconfig();
   #endif
 
   /* --- Place any board specific initialization here --- */

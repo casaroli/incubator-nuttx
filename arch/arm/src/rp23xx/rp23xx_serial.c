@@ -22,6 +22,7 @@
  * Included Files
  ****************************************************************************/
 
+#include "hardware/regs/uart.h"
 #include <nuttx/config.h>
 
 #include <sys/types.h>
@@ -44,7 +45,6 @@
 
 #include <arch/board/board.h>
 
-#include "chip.h"
 #include "arm_internal.h"
 #include "rp23xx_config.h"
 #include "rp23xx_serial.h"
@@ -52,6 +52,9 @@
 /****************************************************************************
  * Pre-processor definitions
  ****************************************************************************/
+
+#define RP23XX_UART_LCR_H_WLEN(x) ((((x) - 5) << UART_UARTLCR_H_WLEN_LSB) & UART_UARTLCR_H_WLEN_BITS)
+#define RP23XX_UART_INTR_ALL (0x7ff)   /* All of interrupts */
 
 /* If we are not using the serial driver for the console, then we still must
  * provide some minimal implementation of up_putc.
@@ -65,7 +68,7 @@
 
 struct up_dev_s
 {
-  uintptr_t uartbase; /* Base address of UART registers */
+  uart_hw_t *uartbase; /* Base address of UART registers */
   uint32_t basefreq;  /* Base frequency of input clock */
   uint32_t baud;      /* Configured baud */
   uint32_t ier;       /* Saved IER value */
@@ -147,7 +150,7 @@ static char g_uart1txbuffer[CONFIG_UART1_TXBUFSIZE];
 #ifdef CONFIG_RP23XX_UART0
 static struct up_dev_s g_uart0priv =
 {
-  .uartbase  = RP23XX_UART0_BASE,
+  .uartbase  = uart0_hw,
   .basefreq  = BOARD_UART_BASEFREQ,
   .baud      = CONFIG_UART0_BAUD,
   .id        = 0,
@@ -186,7 +189,7 @@ static uart_dev_t g_uart0port =
 #ifdef CONFIG_RP23XX_UART1
 static struct up_dev_s g_uart1priv =
 {
-  .uartbase  = RP23XX_UART1_BASE,
+  .uartbase  = uart1_hw,
   .basefreq  = BOARD_UART_BASEFREQ,
   .baud      = CONFIG_UART1_BAUD,
   .id        = 1,
@@ -231,29 +234,6 @@ static uart_dev_t g_uart1port =
 #endif /* HAVE_CONSOLE */
 
 /****************************************************************************
- * Inline Functions
- ****************************************************************************/
-
-/****************************************************************************
- * Name: up_serialin
- ****************************************************************************/
-
-static inline uint32_t up_serialin(struct up_dev_s *priv, int offset)
-{
-  return getreg32(priv->uartbase + offset);
-}
-
-/****************************************************************************
- * Name: up_serialout
- ****************************************************************************/
-
-static inline void up_serialout(struct up_dev_s *priv, int offset,
-                                uint32_t value)
-{
-  putreg32(value, priv->uartbase + offset);
-}
-
-/****************************************************************************
  * Name: up_disableuartint
  ****************************************************************************/
 
@@ -269,7 +249,7 @@ static inline void up_disableuartint(struct up_dev_s *priv,
     }
 
   priv->ier &= ~RP23XX_UART_INTR_ALL;
-  up_serialout(priv, RP23XX_UART_UARTIMSC_OFFSET, priv->ier);
+  priv->uartbase->imsc = priv->ier;
   spin_unlock_irqrestore(&priv->lock, flags);
 }
 
@@ -283,7 +263,7 @@ static inline void up_restoreuartint(struct up_dev_s *priv, uint32_t ier)
 
   flags = spin_lock_irqsave(&priv->lock);
   priv->ier |= ier & RP23XX_UART_INTR_ALL;
-  up_serialout(priv, RP23XX_UART_UARTIMSC_OFFSET, priv->ier);
+  priv->uartbase->imsc = priv->ier;
   spin_unlock_irqrestore(&priv->lock, flags);
 }
 
@@ -293,17 +273,17 @@ static inline void up_restoreuartint(struct up_dev_s *priv, uint32_t ier)
 
 static inline void up_enablebreaks(struct up_dev_s *priv, bool enable)
 {
-  uint32_t lcr = up_serialin(priv, RP23XX_UART_UARTLCR_H_OFFSET);
+  uint32_t lcr = priv->uartbase->lcr_h;
   if (enable)
     {
-      lcr |= RP23XX_UART_UARTLCR_H_BRK;
+      lcr |= UART_UARTLCR_H_BRK_BITS;
     }
   else
     {
-      lcr &= ~RP23XX_UART_UARTLCR_H_BRK;
+      lcr &= ~UART_UARTLCR_H_BRK_BITS;
     }
 
-  up_serialout(priv, RP23XX_UART_UARTLCR_H_OFFSET, lcr);
+  priv->uartbase->lcr_h = lcr;
 }
 
 /****************************************************************************
@@ -327,13 +307,13 @@ static void up_set_format(struct uart_dev_s *dev)
 
   /* Get the original state of control register */
 
-  cr    = up_serialin(priv, RP23XX_UART_UARTCR_OFFSET);
-  cr_en = cr & RP23XX_UART_UARTCR_UARTEN;
-  cr   &= ~RP23XX_UART_UARTCR_UARTEN;
+  cr    = priv->uartbase->cr;
+  cr_en = cr & UART_UARTCR_UARTEN_BITS;
+  cr   &= ~UART_UARTCR_UARTEN_BITS;
 
   /* Disable until the format bits and baud rate registers are updated */
 
-  up_serialout(priv, RP23XX_UART_UARTCR_OFFSET, cr);
+  priv->uartbase->cr = cr;
 
   /* Set the BAUD divisor */
 
@@ -341,10 +321,10 @@ static void up_set_format(struct uart_dev_s *dev)
 
   /* Set up the LCR */
 
-  lcr = up_serialin(priv, RP23XX_UART_UARTLCR_H_OFFSET);
+  lcr = priv->uartbase->lcr_h;
 
-  lcr &= ~(RP23XX_UART_LCR_H_WLEN(8) | RP23XX_UART_UARTLCR_H_STP2 |
-           RP23XX_UART_UARTLCR_H_EPS | RP23XX_UART_UARTLCR_H_PEN);
+  lcr &= ~(RP23XX_UART_LCR_H_WLEN(8) | UART_UARTLCR_H_STP2_BITS |
+           UART_UARTLCR_H_EPS_BITS | UART_UARTLCR_H_PEN_BITS);
 
   if ((5 <= priv->bits) && (priv->bits < 8))
     {
@@ -357,24 +337,24 @@ static void up_set_format(struct uart_dev_s *dev)
 
   if (priv->stopbits2)
     {
-      lcr |= RP23XX_UART_UARTLCR_H_STP2;
+      lcr |= UART_UARTLCR_H_STP2_BITS;
     }
 
   if (priv->parity == 1)
     {
-      lcr |= (RP23XX_UART_UARTLCR_H_PEN);
+      lcr |= (UART_UARTLCR_H_PEN_BITS);
     }
   else if (priv->parity == 2)
     {
-      lcr |= (RP23XX_UART_UARTLCR_H_PEN | RP23XX_UART_UARTLCR_H_EPS);
+      lcr |= (UART_UARTLCR_H_PEN_BITS | UART_UARTLCR_H_EPS_BITS);
     }
 
-  up_serialout(priv, RP23XX_UART_UARTLCR_H_OFFSET, lcr);
+  priv->uartbase->lcr_h = lcr;
 
   /* Enable Auto-RTS and Auto-CS Flow Control in the Modem Control Register */
 
-  cr &= ~(RP23XX_UART_UARTCR_RTSEN | RP23XX_UART_UARTCR_CTSEN);
-  cr |= RP23XX_UART_UARTCR_RTS;
+  cr &= ~(UART_UARTCR_RTSEN_BITS | UART_UARTCR_CTSEN_BITS);
+  cr |= UART_UARTCR_RTSEN_BITS;
 
 #ifdef CONFIG_SERIAL_IFLOWCONTROL
   if (priv->iflow)
@@ -388,7 +368,7 @@ static void up_set_format(struct uart_dev_s *dev)
       cr |= RP23XX_UART_UARTCR_CTSEN;
     }
 #endif
-  up_serialout(priv, RP23XX_UART_UARTCR_OFFSET, cr | cr_en);
+  priv->uartbase->cr = cr | cr_en;
 
   spin_unlock_irqrestore(&priv->lock, flags);
 }
@@ -412,14 +392,14 @@ static int up_setup(struct uart_dev_s *dev)
 
   /* Init HW */
 
-  up_serialout(priv, RP23XX_UART_UARTCR_OFFSET, 0);
-  up_serialout(priv, RP23XX_UART_UARTLCR_H_OFFSET, 0);
-  up_serialout(priv, RP23XX_UART_UARTDMACR_OFFSET, 0);
-  up_serialout(priv, RP23XX_UART_UARTRSR_OFFSET, 0xf);
+  priv->uartbase->cr = 0;
+  priv->uartbase->lcr_h = 0;
+  priv->uartbase->dmacr = 0;
+  priv->uartbase->rsr = 0xf;
 
   /* Set up the IER */
 
-  priv->ier = up_serialin(priv, RP23XX_UART_UARTIMSC_OFFSET);
+  priv->ier = priv->uartbase->imsc;
 
   /* Configure the UART line format and speed. */
 
@@ -427,22 +407,22 @@ static int up_setup(struct uart_dev_s *dev)
 
   /* Set interrupt FIFO level */
 
-  up_serialout(priv, RP23XX_UART_UARTIFLS_OFFSET, 0);
+  priv->uartbase->ifls = 0;
 
   /* Clear all interrupts */
 
-  up_serialout(priv, RP23XX_UART_UARTICR_OFFSET, 0x7ff);
+  priv->uartbase->icr = 0x7ff;
 
   /* Enable FIFO and UART in the last */
 
-  lcr = up_serialin(priv, RP23XX_UART_UARTLCR_H_OFFSET);
-  lcr |= RP23XX_UART_UARTLCR_H_FEN;
-  up_serialout(priv, RP23XX_UART_UARTLCR_H_OFFSET, lcr);
+  lcr = priv->uartbase->lcr_h;
+  lcr |= UART_UARTLCR_H_FEN_BITS;
+  priv->uartbase->lcr_h = lcr;
 
-  cr = up_serialin(priv, RP23XX_UART_UARTCR_OFFSET);
-  cr |= RP23XX_UART_UARTCR_RXE | RP23XX_UART_UARTCR_TXE |
-        RP23XX_UART_UARTCR_UARTEN;
-  up_serialout(priv, RP23XX_UART_UARTCR_OFFSET, cr);
+  cr = priv->uartbase->cr;
+  cr |= UART_UARTCR_RXE_BITS | UART_UARTCR_TXE_BITS |
+        UART_UARTCR_UARTEN_BITS;
+  priv->uartbase->cr = cr;
 #endif
 
   return OK;
@@ -582,52 +562,52 @@ static int up_interrupt(int irq, void *context, void *arg)
        * termination conditions
        */
 
-      status = up_serialin(priv, RP23XX_UART_UARTMIS_OFFSET);
+      status = priv->uartbase->mis;
       if (status == 0)
         {
           return OK;
         }
 
-      up_serialout(priv, RP23XX_UART_UARTICR_OFFSET, status);
-      if (status & RP23XX_UART_UARTICR_RIMIC)
+      priv->uartbase->icr = status;
+      if (status & UART_UARTICR_RIMIC_BITS)
         {
         }
 
-      if (status & RP23XX_UART_UARTICR_CTSMIC)
+      if (status & UART_UARTICR_CTSMIC_BITS)
         {
         }
 
-      if (status & RP23XX_UART_UARTICR_DCDMIC)
+      if (status & UART_UARTICR_DCDMIC_BITS)
         {
         }
 
-      if (status & RP23XX_UART_UARTICR_DSRMIC)
+      if (status & UART_UARTICR_DSRMIC_BITS)
         {
         }
 
-      if (status & (RP23XX_UART_UARTICR_RXIC | RP23XX_UART_UARTICR_RTIC))
+      if (status & (UART_UARTICR_RXIC_BITS | UART_UARTICR_RTIC_BITS))
         {
           uart_recvchars(dev);
         }
 
-      if (status & RP23XX_UART_UARTICR_TXIC)
+      if (status & UART_UARTICR_TXIC_BITS)
         {
           uart_xmitchars(dev);
         }
 
-      if (status & RP23XX_UART_UARTICR_FEIC)
+      if (status & UART_UARTICR_FEIC_BITS)
         {
         }
 
-      if (status & RP23XX_UART_UARTICR_PEIC)
+      if (status & UART_UARTICR_PEIC_BITS)
         {
         }
 
-      if (status & RP23XX_UART_UARTICR_BEIC)
+      if (status & UART_UARTICR_BEIC_BITS)
         {
         }
 
-      if (status & RP23XX_UART_UARTICR_OEIC)
+      if (status & UART_UARTICR_OEIC_BITS)
         {
         }
     }
@@ -825,7 +805,7 @@ static int up_receive(struct uart_dev_s *dev, unsigned int *status)
   struct up_dev_s *priv = (struct up_dev_s *)dev->priv;
   uint32_t rbr;
 
-  rbr     = up_serialin(priv, RP23XX_UART_UARTDR_OFFSET);
+  rbr     = priv->uartbase->dr;
   *status = rbr & 0xf00;
   return rbr & 0xff;
 }
@@ -847,15 +827,15 @@ static void up_rxint(struct uart_dev_s *dev, bool enable)
   if (enable)
     {
 #ifndef CONFIG_SUPPRESS_SERIAL_INTS
-      priv->ier |= (RP23XX_UART_UARTICR_RXIC | RP23XX_UART_UARTICR_RTIC);
+      priv->ier |= (UART_UARTICR_RXIC_BITS | UART_UARTICR_RTIC_BITS);
 #endif
     }
   else
     {
-      priv->ier &= ~(RP23XX_UART_UARTICR_RXIC | RP23XX_UART_UARTICR_RTIC);
+      priv->ier &= ~(UART_UARTICR_RXIC_BITS | UART_UARTICR_RTIC_BITS);
     }
 
-  up_serialout(priv, RP23XX_UART_UARTIMSC_OFFSET, priv->ier);
+  priv->uartbase->imsc = priv->ier;
   spin_unlock_irqrestore(&priv->lock, flags);
 }
 
@@ -870,8 +850,7 @@ static void up_rxint(struct uart_dev_s *dev, bool enable)
 static bool up_rxavailable(struct uart_dev_s *dev)
 {
   struct up_dev_s *priv = (struct up_dev_s *)dev->priv;
-  return ((up_serialin(priv, RP23XX_UART_UARTFR_OFFSET)
-           & RP23XX_UART_UARTFR_RXFE) == 0);
+  return ((priv->uartbase->fr & UART_UARTFR_RXFE_BITS) == 0);
 }
 
 /****************************************************************************
@@ -885,7 +864,7 @@ static bool up_rxavailable(struct uart_dev_s *dev)
 static void up_send(struct uart_dev_s *dev, int ch)
 {
   struct up_dev_s *priv = (struct up_dev_s *)dev->priv;
-  up_serialout(priv, RP23XX_UART_UARTDR_OFFSET, (uint32_t)ch);
+  priv->uartbase->dr = (uint32_t)ch;
 }
 
 /****************************************************************************
@@ -905,8 +884,8 @@ static void up_txint(struct uart_dev_s *dev, bool enable)
   if (enable)
     {
 #ifndef CONFIG_SUPPRESS_SERIAL_INTS
-      priv->ier |= RP23XX_UART_UARTICR_TXIC;
-      up_serialout(priv, RP23XX_UART_UARTIMSC_OFFSET, priv->ier);
+      priv->ier |= UART_UARTICR_TXIC_BITS;
+      priv->uartbase->imsc = priv->ier;
 
       /* Fake a TX interrupt here by just calling uart_xmitchars() with
        * interrupts disabled (note this may recurse).
@@ -917,8 +896,8 @@ static void up_txint(struct uart_dev_s *dev, bool enable)
     }
   else
     {
-      priv->ier &= ~RP23XX_UART_UARTICR_TXIC;
-      up_serialout(priv, RP23XX_UART_UARTIMSC_OFFSET, priv->ier);
+      priv->ier &= ~UART_UARTICR_TXIC_BITS;
+      priv->uartbase->imsc = priv->ier;
     }
 
   leave_critical_section(flags);
@@ -935,8 +914,8 @@ static void up_txint(struct uart_dev_s *dev, bool enable)
 static bool up_txready(struct uart_dev_s *dev)
 {
   struct up_dev_s *priv = (struct up_dev_s *)dev->priv;
-  return ((up_serialin(priv, RP23XX_UART_UARTFR_OFFSET)
-           & RP23XX_UART_UARTFR_TXFF) == 0);
+  return ((priv->uartbase->fr
+           & UART_UARTFR_TXFF_BITS) == 0);
 }
 
 /****************************************************************************
@@ -951,9 +930,9 @@ static bool up_txempty(struct uart_dev_s *dev)
 {
   struct up_dev_s *priv = (struct up_dev_s *)dev->priv;
   uint32_t rbr = 0;
-  rbr = up_serialin(priv, RP23XX_UART_UARTFR_OFFSET);
-  return (((rbr & RP23XX_UART_UARTFR_TXFE) != 0) &&
-          ((rbr & RP23XX_UART_UARTFR_BUSY) == 0));
+  rbr = priv->uartbase->fr;
+  return (((rbr & UART_UARTFR_TXFE_BITS) != 0) &&
+          ((rbr & UART_UARTFR_BUSY_BITS) == 0));
 }
 
 /****************************************************************************

@@ -35,13 +35,14 @@
 #include <nuttx/spinlock.h>
 #include <nuttx/sched_note.h>
 
+#include "hardware/address_mapped.h"
+#include "hardware/regs/sio.h"
 #include "nvic.h"
 #include "sched/sched.h"
 #include "init/init.h"
 #include "arm_internal.h"
-#include "hardware/rp23xx_memorymap.h"
-#include "hardware/rp23xx_sio.h"
-#include "hardware/rp23xx_psm.h"
+#include "hardware/structs/sio.h"
+#include "hardware/structs/psm.h"
 
 #ifdef CONFIG_SMP
 
@@ -82,11 +83,11 @@ extern int arm_pause_handler(int irq, void *c, void *arg);
 
 static void fifo_drain(void)
 {
-  putreg32(0, RP23XX_SIO_FIFO_ST);
+  putreg32(0, &sio_hw->fifo_st);
 
-  while (getreg32(RP23XX_SIO_FIFO_ST) & RP23XX_SIO_FIFO_ST_VLD)
+  while (getreg32(&sio_hw->fifo_st) & SIO_FIFO_ST_VLD_BITS)
     {
-      getreg32(RP23XX_SIO_FIFO_RD);
+      getreg32(&sio_hw->fifo_rd);
     }
 
   __asm__ volatile ("sev");
@@ -110,15 +111,15 @@ static int fifo_comm(uint32_t msg)
 {
   uint32_t rcv;
 
-  while (!(getreg32(RP23XX_SIO_FIFO_ST) & RP23XX_SIO_FIFO_ST_RDY))
+  while (!(getreg32(&sio_hw->fifo_st) & SIO_FIFO_ST_RDY_BITS))
     ;
-  putreg32(msg, RP23XX_SIO_FIFO_WR);
+  putreg32(msg, &sio_hw->fifo_wr);
   __asm__ volatile ("sev");
 
-  while (!(getreg32(RP23XX_SIO_FIFO_ST) & RP23XX_SIO_FIFO_ST_VLD))
+  while (!(getreg32(&sio_hw->fifo_st) & SIO_FIFO_ST_VLD_BITS))
     __asm__ volatile ("wfe");
 
-  rcv = getreg32(RP23XX_SIO_FIFO_RD);
+  rcv = getreg32(&sio_hw->fifo_rd);
 
   return msg == rcv;
 }
@@ -151,8 +152,8 @@ static void core1_boot(void)
 
   /* Enable inter-processor FIFO interrupt */
 
-  irq_attach(RP23XX_SIO_IRQ_PROC1, arm_pause_handler, NULL);
-  up_enable_irq(RP23XX_SIO_IRQ_PROC1);
+  irq_attach(RP23XX_SIO_IRQ_FIFO, arm_pause_handler, NULL);
+  up_enable_irq(RP23XX_SIO_IRQ_FIFO);
 
   spin_unlock(&g_core1_boot);
 
@@ -214,10 +215,10 @@ int up_cpu_start(int cpu)
 
   /* Reset Core 1 */
 
-  setbits_reg32(RP23XX_PSM_PROC1, RP23XX_PSM_FRCE_OFF);
-  while (!(getreg32(RP23XX_PSM_FRCE_OFF) & RP23XX_PSM_PROC1))
+  hw_set_bits(&psm_hw->frce_off, PSM_FRCE_OFF_PROC1_BITS);
+  while (!(getreg32(&psm_hw->frce_off) & PSM_FRCE_OFF_PROC1_BITS))
     ;
-  clrbits_reg32(RP23XX_PSM_PROC1, RP23XX_PSM_FRCE_OFF);
+  hw_clear_bits(&psm_hw->frce_off, PSM_FRCE_OFF_PROC1_BITS);
 
   spin_lock(&g_core1_boot);
 
@@ -225,7 +226,7 @@ int up_cpu_start(int cpu)
 
   core1_boot_msg[0] = 0;
   core1_boot_msg[1] = 1;
-  core1_boot_msg[2] = getreg32(ARMV6M_SYSCON_VECTAB);
+  core1_boot_msg[2] = getreg32(NVIC_VECTAB);
   core1_boot_msg[3] = (uint32_t)tcb->stack_base_ptr +
                                 tcb->adj_stack_size;
   core1_boot_msg[4] = (uint32_t)core1_boot;
@@ -247,8 +248,8 @@ int up_cpu_start(int cpu)
 
   /* Enable inter-processor FIFO interrupt */
 
-  irq_attach(RP23XX_SIO_IRQ_PROC0, arm_pause_handler, NULL);
-  up_enable_irq(RP23XX_SIO_IRQ_PROC0);
+  irq_attach(RP23XX_SIO_IRQ_FIFO, arm_pause_handler, NULL);
+  up_enable_irq(RP23XX_SIO_IRQ_FIFO);
 
   spin_lock(&g_core1_boot);
 

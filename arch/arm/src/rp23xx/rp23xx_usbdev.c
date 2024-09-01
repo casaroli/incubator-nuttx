@@ -44,11 +44,20 @@
 #include "arm_internal.h"
 #include "rp23xx_usbdev.h"
 
-#include "hardware/rp23xx_resets.h"
+#include "hardware/address_mapped.h"
+#include "hardware/regs/addressmap.h"
+#include "hardware/regs/usb.h"
+#include "hardware/regs/usb_device_dpram.h"
+#include "hardware/structs/resets.h"
+#include "hardware/regs/resets.h"
+#include "hardware/structs/usb_dpram.h"
 
 /****************************************************************************
  * Pre-processor Definitions
  ****************************************************************************/
+
+#define RP23XX_USBCTRL_DPSRAM_DATA_BUF_OFFSET 0x180
+#define RP23XX_USBCTRL_DPSRAM_EP_CTRL_EP_ADDR_MASK 0xffc0
 
 /* Configuration ************************************************************/
 
@@ -231,19 +240,19 @@ struct rp23xx_ep_s
 
   /* RP23XX-specific fields */
 
-  struct rp23xx_usbdev_s *dev;    /* Reference to private driver data */
-  struct rp23xx_req_s *head;      /* Request list for this endpoint */
+  struct rp23xx_usbdev_s *dev;                    /* Reference to private driver data */
+  struct rp23xx_req_s *head;                      /* Request list for this endpoint */
   struct rp23xx_req_s *tail;
-  uint8_t *data_buf;              /* DPSRAM buffer address */
-  uint32_t ep_ctrl;               /* DPSRAM EP control register address */
-  uint32_t buf_ctrl;              /* DPSRAM buffer control register address */
-  int     next_pid;               /* Next PID 0:DATA0, 1:DATA1 */
-  uint8_t type;                   /* 0:cont, 1:iso, 2:bulk, 3:int */
-  uint8_t epphy;                  /* Physical EP address */
-  bool    txnullpkt;              /* Null packet needed at end of transfer */
-  bool    in;                     /* in = true, out = false */
-  bool    stalled;                /* The EP is stalled */
-  bool    pending_stall;          /* Pending stall request */
+  uint8_t *data_buf;                              /* DPSRAM buffer address */
+  struct usb_device_dpram_ep_ctrl *ep_ctrl;       /* DPSRAM EP control register address */
+  struct usb_device_dpram_ep_buf_ctrl *buf_ctrl;  /* DPSRAM buffer control register address */
+  int     next_pid;                               /* Next PID 0:DATA0, 1:DATA1 */
+  uint8_t type;                                   /* 0:cont, 1:iso, 2:bulk, 3:int */
+  uint8_t epphy;                                  /* Physical EP address */
+  bool    txnullpkt;                              /* Null packet needed at end of transfer */
+  bool    in;                                     /* in = true, out = false */
+  bool    stalled;                                /* The EP is stalled */
+  bool    pending_stall;                          /* Pending stall request */
 };
 
 /* This structure encapsulates the overall driver state */
@@ -502,10 +511,10 @@ static int rp23xx_epwrite(struct rp23xx_ep_s *privep, uint8_t *buf,
   memcpy(privep->data_buf, buf, nbytes);
 
   val = nbytes |
-        RP23XX_USBCTRL_DPSRAM_EP_BUFF_CTRL_AVAIL |
-        RP23XX_USBCTRL_DPSRAM_EP_BUFF_CTRL_FULL |
+        USB_BUF_CTRL_AVAIL |
+        USB_BUF_CTRL_FULL |
         (privep->next_pid ?
-         RP23XX_USBCTRL_DPSRAM_EP_BUFF_CTRL_DATA1_PID : 0);
+         USB_BUF_CTRL_DATA1_PID : 0);
 
   privep->next_pid = 1 - privep->next_pid;    /* Invert DATA0 <-> DATA1 */
 
@@ -532,9 +541,9 @@ static int rp23xx_epread(struct rp23xx_ep_s *privep, uint16_t nbytes)
   irqstate_t flags;
 
   val = nbytes |
-        RP23XX_USBCTRL_DPSRAM_EP_BUFF_CTRL_AVAIL |
+        USB_BUF_CTRL_AVAIL |
         (privep->next_pid ?
-         RP23XX_USBCTRL_DPSRAM_EP_BUFF_CTRL_DATA1_PID : 0);
+         USB_BUF_CTRL_DATA1_PID : 0);
 
   privep->next_pid = 1 - privep->next_pid;    /* Invert DATA0 <-> DATA1 */
 
@@ -637,7 +646,7 @@ static void rp23xx_txcomplete(struct rp23xx_ep_s *privep)
   else
     {
       privreq->req.xfrd += getreg32(privep->buf_ctrl)
-                           & RP23XX_USBCTRL_DPSRAM_EP_BUFF_CTRL_LEN_MASK;
+                           & USB_BUF_CTRL_LEN_MASK;
 
       if (privreq->req.xfrd >= privreq->req.len && !privep->txnullpkt)
         {
@@ -742,7 +751,7 @@ static void rp23xx_rxcomplete(struct rp23xx_ep_s *privep)
   uint16_t nrxbytes;
 
   nrxbytes = getreg32(privep->buf_ctrl)
-             & RP23XX_USBCTRL_DPSRAM_EP_BUFF_CTRL_LEN_MASK;
+             & USB_BUF_CTRL_LEN_MASK;
 
   privreq = rp23xx_rqpeek(privep);
   if (!privreq)
@@ -1206,7 +1215,7 @@ static void rp23xx_usbintr_setup(struct rp23xx_usbdev_s *priv)
 
   /* Read USB control request data */
 
-  memcpy(&priv->ctrl, (void *)RP23XX_USBCTRL_DPSRAM_SETUP_PACKET,
+  memcpy(&priv->ctrl, (void *)&usb_dpram->setup_packet,
          USB_SIZEOF_CTRLREQ);
   len = GETUINT16(priv->ctrl.len);
 
@@ -1252,7 +1261,7 @@ static void rp23xx_usbintr_ep0out(struct rp23xx_usbdev_s *priv,
   int len;
 
   len = getreg32(privep->buf_ctrl)
-        & RP23XX_USBCTRL_DPSRAM_EP_BUFF_CTRL_LEN_MASK;
+        & USB_BUF_CTRL_LEN_MASK;
 
   if (len == 0)
     {
@@ -1286,7 +1295,7 @@ static void rp23xx_usbintr_ep0out(struct rp23xx_usbdev_s *priv,
 
 static bool rp23xx_usbintr_buffstat(struct rp23xx_usbdev_s *priv)
 {
-  uint32_t stat = getreg32(RP23XX_USBCTRL_REGS_BUFF_STATUS);
+  uint32_t stat = getreg32(&usb_hw->buf_status);
   uint32_t bit;
   int i;
   struct rp23xx_ep_s *privep;
@@ -1303,7 +1312,7 @@ static bool rp23xx_usbintr_buffstat(struct rp23xx_usbdev_s *priv)
     {
       if (stat & bit)
         {
-          clrbits_reg32(bit, RP23XX_USBCTRL_REGS_BUFF_STATUS);
+          hw_clear_bits(&usb_hw->buf_status, bit);
           privep = &priv->eplist[RP23XX_DPTOEP(i)];
 
           if (i == 1)
@@ -1314,7 +1323,7 @@ static bool rp23xx_usbintr_buffstat(struct rp23xx_usbdev_s *priv)
             {
               if (i == 0 && priv->dev_addr != 0)
                 {
-                  putreg32(priv->dev_addr, RP23XX_USBCTRL_REGS_ADDR_ENDP);
+                  putreg32(priv->dev_addr, &usb_hw->dev_addr_ctrl);
                   priv->dev_addr = 0;
                 }
 
@@ -1358,7 +1367,7 @@ static void rp23xx_usbintr_busreset(struct rp23xx_usbdev_s *priv)
 
   usbtrace(TRACE_INTDECODE(RP23XX_TRACEINTID_INTR_BUSRESET), 0);
 
-  putreg32(0, RP23XX_USBCTRL_REGS_ADDR_ENDP);
+  putreg32(0, &usb_hw->dev_addr_ctrl);
   priv->dev_addr = 0;
   priv->zlp_stat = RP23XX_ZLP_NONE;
   priv->next_offset = RP23XX_USBCTRL_DPSRAM_DATA_BUF_OFFSET;
@@ -1376,8 +1385,7 @@ static void rp23xx_usbintr_busreset(struct rp23xx_usbdev_s *priv)
       CLASS_DISCONNECT(priv->driver, &priv->usbdev);
     }
 
-  clrbits_reg32(RP23XX_USBCTRL_REGS_SIE_STATUS_BUS_RESET,
-                RP23XX_USBCTRL_REGS_SIE_STATUS);
+  hw_clear_bits(&usb_hw->sie_status, USB_SIE_STATUS_BUS_RESET_BITS);
 }
 
 /****************************************************************************
@@ -1393,28 +1401,26 @@ static int rp23xx_usbinterrupt(int irq, void *context, void *arg)
   struct rp23xx_usbdev_s *priv = (struct rp23xx_usbdev_s *)arg;
   uint32_t stat;
 
-  stat = getreg32(RP23XX_USBCTRL_REGS_INTS);
+  stat = getreg32(&usb_hw->ints);
 
   usbtrace(TRACE_INTENTRY(RP23XX_TRACEINTID_USBINTERRUPT), 0);
 
-  if (stat & RP23XX_USBCTRL_REGS_INTR_BUFF_STATUS)
+  if (stat & USB_INTR_BUFF_STATUS_BITS)
     {
       while (rp23xx_usbintr_buffstat(priv))
         ;
     }
 
-  if (stat & RP23XX_USBCTRL_REGS_INTR_SETUP_REQ)
+  if (stat & USB_INTR_SETUP_REQ_BITS)
     {
-      clrbits_reg32(RP23XX_USBCTRL_REGS_SIE_STATUS_SETUP_REC,
-                    RP23XX_USBCTRL_REGS_SIE_STATUS);
+      hw_clear_bits(&usb_hw->sie_status, USB_SIE_STATUS_SETUP_REC_BITS);
 
       rp23xx_usbintr_setup(priv);
     }
 
-  if (stat & RP23XX_USBCTRL_REGS_INTR_BUS_RESET)
+  if (stat & USB_INTR_BUS_RESET_BITS)
     {
-      clrbits_reg32(RP23XX_USBCTRL_REGS_SIE_STATUS_BUS_RESET,
-                    RP23XX_USBCTRL_REGS_SIE_STATUS);
+      hw_clear_bits(&usb_hw->sie_status, USB_SIE_STATUS_BUS_RESET_BITS);
 
       rp23xx_usbintr_busreset(priv);
     }
@@ -1471,16 +1477,16 @@ static int rp23xx_epconfigure(struct usbdev_ep_s *ep,
        * (No need for EP0 because it has the dedicated buffer)
        */
 
-      privep->data_buf = (uint8_t *)(RP23XX_USBCTRL_DPSRAM_BASE +
+      privep->data_buf = (uint8_t *)(USBCTRL_DPRAM_BASE +
                                      priv->next_offset);
       priv->next_offset =
                      (priv->next_offset + privep->ep.maxpacket + 63) & ~63;
 
       /* Enable EP */
 
-      putreg32(RP23XX_USBCTRL_DPSRAM_EP_CTRL_ENABLE |
-               RP23XX_USBCTRL_DPSRAM_EP_CTRL_INT_1BUF |
-               (eptype << RP23XX_USBCTRL_DPSRAM_EP_CTRL_EP_TYPE_SHIFT) |
+      putreg32(EP_CTRL_ENABLE_BITS |
+               EP_CTRL_INTERRUPT_PER_BUFFER |
+               (eptype << EP_CTRL_BUFFER_TYPE_LSB) |
                ((uint32_t)privep->data_buf &
                 RP23XX_USBCTRL_DPSRAM_EP_CTRL_EP_ADDR_MASK),
                privep->ep_ctrl);
@@ -1717,15 +1723,15 @@ static int rp23xx_epstall_exec(struct usbdev_ep_s *ep)
 
   if (privep->epphy == 0)
     {
-      setbits_reg32(privep->in ?
-                     RP23XX_USBCTRL_REGS_EP_STALL_ARM_EP0_IN :
-                     RP23XX_USBCTRL_REGS_EP_STALL_ARM_EP0_OUT,
-                    RP23XX_USBCTRL_REGS_EP_STALL_ARM);
+      hw_set_bits(&usb_hw->ep_stall_arm,
+                  privep->in ?
+                     USB_EP_STALL_ARM_EP0_IN_BITS :
+                     USB_EP_STALL_ARM_EP0_OUT_BITS);
     }
 
   rp23xx_update_buffer_control(privep,
                     0,
-                    RP23XX_USBCTRL_DPSRAM_EP_BUFF_CTRL_STALL);
+                    USB_BUF_CTRL_STALL);
 
   privep->pending_stall = false;
 
@@ -1755,14 +1761,14 @@ static int rp23xx_epstall(struct usbdev_ep_s *ep, bool resume)
       privep->stalled = false;
       if (privep->epphy == 0)
         {
-          clrbits_reg32(privep->in ?
-                         RP23XX_USBCTRL_REGS_EP_STALL_ARM_EP0_IN :
-                         RP23XX_USBCTRL_REGS_EP_STALL_ARM_EP0_OUT,
-                        RP23XX_USBCTRL_REGS_EP_STALL_ARM);
+          hw_clear_bits(&usb_hw->ep_stall_arm,
+                        privep->in ?
+                        USB_EP_STALL_ARM_EP0_IN_BITS :
+                        USB_EP_STALL_ARM_EP0_OUT_BITS);
         }
 
       rp23xx_update_buffer_control(privep,
-                        ~(RP23XX_USBCTRL_DPSRAM_EP_BUFF_CTRL_STALL),
+                        ~(USB_BUF_CTRL_STALL),
                         0);
 
       privep->next_pid = 0;
@@ -1850,16 +1856,18 @@ static struct usbdev_ep_s *rp23xx_allocep(struct usbdev_s *dev,
 
   privep->next_pid = 0;
   privep->stalled = false;
-  privep->buf_ctrl = RP23XX_USBCTRL_DPSRAM_EP_BUF_CTRL(dpindex);
+  // privep->buf_ctrl = &usb_dpram->ep_buf_ctrl[dpindex];
+  privep->buf_ctrl = (void *)(0x50100000 + (0x000080 + (dpindex) * 4));
 
   if (epphy == 0)
     {
-      privep->data_buf = (uint8_t *)RP23XX_USBCTRL_DPSRAM_EP0_BUF_0;
+      privep->data_buf = (uint8_t *)&usb_dpram->ep0_buf_a;
       privep->ep_ctrl = 0;
     }
   else
     {
-      privep->ep_ctrl = RP23XX_USBCTRL_DPSRAM_EP_CTRL(dpindex);
+      // privep->ep_ctrl = &usb_dpram->ep_ctrl[dpindex-2];
+      privep->ep_ctrl = (void *)(0x50100000 + (0x000008 + ((dpindex)-2) * 4));
     }
 
   return &privep->ep;
@@ -1904,8 +1912,8 @@ static int rp23xx_getframe(struct usbdev_s *dev)
     }
 #endif
 
-  return (int)(getreg32(RP23XX_USBCTRL_REGS_SOF_RD) &
-               RP23XX_USBCTRL_REGS_SOF_RD_COUNT_MASK);
+  return (int)(getreg32(&usb_hw->sof_rd) &
+                        USB_SOF_RD_COUNT_BITS);
 }
 
 /****************************************************************************
@@ -1920,8 +1928,7 @@ static int rp23xx_wakeup(struct usbdev_s *dev)
 {
   usbtrace(TRACE_DEVWAKEUP, 0);
 
-  setbits_reg32(RP23XX_USBCTRL_REGS_SIE_CTRL_RESUME,
-                RP23XX_USBCTRL_REGS_SIE_CTRL);
+  hw_set_bits(&usb_hw->sie_ctrl, USB_SIE_CTRL_RESUME_BITS);
 
   return OK;
 }
@@ -1966,13 +1973,11 @@ static int rp23xx_pullup(struct usbdev_s *dev, bool enable)
 
   if (enable)
     {
-      setbits_reg32(RP23XX_USBCTRL_REGS_SIE_CTRL_PULLUP_EN,
-                    RP23XX_USBCTRL_REGS_SIE_CTRL);
+      hw_set_bits(&usb_hw->sie_ctrl, USB_SIE_CTRL_PULLUP_EN_BITS);
     }
   else
     {
-      clrbits_reg32(RP23XX_USBCTRL_REGS_SIE_CTRL_PULLUP_EN,
-                    RP23XX_USBCTRL_REGS_SIE_CTRL);
+      hw_clear_bits(&usb_hw->sie_ctrl, USB_SIE_CTRL_PULLUP_EN_BITS);
     }
 
   return OK;
@@ -2002,7 +2007,7 @@ void arm_usbinitialize(void)
 
   usbtrace(TRACE_DEVINIT, 0);
 
-  putreg32(0, RP23XX_USBCTRL_REGS_ADDR_ENDP);
+  putreg32(0, &usb_hw->dev_addr_ctrl);
 
   /* Initialize driver instance */
 
@@ -2067,17 +2072,17 @@ int usbdev_register(struct usbdevclass_driver_s *driver)
 
   g_usbdev.driver = driver;
 
-  setbits_reg32(RP23XX_RESETS_RESET_USBCTRL, RP23XX_RESETS_RESET);
-  clrbits_reg32(RP23XX_RESETS_RESET_USBCTRL, RP23XX_RESETS_RESET);
+  hw_set_bits(&resets_hw->reset, RESETS_RESET_USBCTRL_BITS);
+  hw_clear_bits(&resets_hw->reset, RESETS_RESET_USBCTRL_BITS);
 
-  memset((void *)RP23XX_USBCTRL_DPSRAM_BASE, 0, 0x1000);
+  memset((void *)USBCTRL_DPRAM_BASE, 0, 0x1000);
 
-  putreg32(RP23XX_USBCTRL_REGS_USB_MUXING_SOFTCON |
-           RP23XX_USBCTRL_REGS_USB_MUXING_TO_PHY,
-           RP23XX_USBCTRL_REGS_USB_MUXING);
-  putreg32(RP23XX_USBCTRL_REGS_USB_PWR_VBUS_DETECT |
-           RP23XX_USBCTRL_REGS_USB_PWR_VBUS_DETECT_OVERRIDE_EN,
-           RP23XX_USBCTRL_REGS_USB_PWR);
+  putreg32(USB_USB_MUXING_SOFTCON_BITS |
+           USB_USB_MUXING_TO_PHY_BITS,
+           &usb_hw->muxing);
+  putreg32(USB_USB_PWR_VBUS_DETECT_BITS |
+           USB_USB_PWR_VBUS_DETECT_OVERRIDE_EN_BITS,
+           &usb_hw->pwr);
 
   rp23xx_allocep(&g_usbdev.usbdev, 0x00, 0, USB_EP_ATTR_XFER_CONTROL);
   rp23xx_allocep(&g_usbdev.usbdev, 0x80, 1, USB_EP_ATTR_XFER_CONTROL);
@@ -2094,17 +2099,17 @@ int usbdev_register(struct usbdevclass_driver_s *driver)
 
   g_usbdev.usbdev.speed = USB_SPEED_FULL;
 
-  putreg32(RP23XX_USBCTRL_REGS_MAIN_CTRL_CONTROLLER_EN,
-           RP23XX_USBCTRL_REGS_MAIN_CTRL);
+  putreg32(USB_MAIN_CTRL_CONTROLLER_EN_BITS,
+           &usb_hw->main_ctrl);
 
   /* Enable interrupt */
 
-  putreg32(RP23XX_USBCTRL_REGS_SIE_CTRL_EP0_INT_1BUF,
-           RP23XX_USBCTRL_REGS_SIE_CTRL);
-  putreg32(RP23XX_USBCTRL_REGS_INTR_BUFF_STATUS |
-           RP23XX_USBCTRL_REGS_INTR_BUS_RESET |
-           RP23XX_USBCTRL_REGS_INTR_SETUP_REQ,
-           RP23XX_USBCTRL_REGS_INTE);
+  putreg32(USB_SIE_CTRL_EP0_INT_1BUF_BITS,
+           &usb_hw->sie_ctrl);
+  putreg32(USB_INTR_BUFF_STATUS_BITS |
+           USB_INTR_BUS_RESET_BITS |
+           USB_INTR_SETUP_REQ_BITS,
+           &usb_hw->inte);
 
   up_enable_irq(RP23XX_USBCTRL_IRQ);
 
